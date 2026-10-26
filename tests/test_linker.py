@@ -2,7 +2,7 @@ import unittest
 
 from ai.james_ai.demo_data import SHIP, VIADUCT
 from ai.james_ai.evaluate import evaluate
-from ai.james_ai.linker import id_key, link, samples_without_proposal
+from ai.james_ai.linker import Sample, code_parts, id_key, link, samples_without_proposal
 
 
 def run_case(case, key):
@@ -116,6 +116,75 @@ class EdgeCases(unittest.TestCase):
         # Lab typed S-04, but the line describes the boiler door gasket (S-03).
         r = link("26-3VK", SHIP["samples"], self.base + "S-04 | Boiler door gasket, black | X")
         self.assertEqual(r.proposals[0].status, "none")
+
+
+def typed_register(*skip):
+    """Fictional register with RVL-style typed codes (prefix = kind of test)."""
+    rows = [
+        ("M01", "Engine room, port bulkhead", "Insulation wrap", "grey fibrous"),
+        ("M12", "Cargo hold 1", "Bulkhead paint, asbestos check", "red-brown"),
+        ("HM12", "Cargo hold 1", "Bulkhead paint, heavy metals", "red-brown"),
+        ("PBS03", "Engine room, main switchboard", "Cable sheath", "black"),
+        ("OS01", "Steering gear room", "Hydraulic oil", "amber"),
+    ]
+    return [Sample(c, "", loc, "", mat, col) for c, loc, mat, col in rows if c not in skip]
+
+
+class TypedCodes(unittest.TestCase):
+    def one(self, line, register=None):
+        return link("", register or typed_register(), "---\n" + line).proposals[0]
+
+    def test_code_parts_splits_prefix_and_number(self):
+        for raw in ("PBS3", "PBS03", "PBS 03", "pbs-03", "PBS-3"):
+            self.assertEqual(code_parts(raw), ("PBS", "3"), raw)
+        self.assertEqual(code_parts("CH6-05"), ("CH6", "5"))
+        self.assertIsNone(code_parts("S-O3"))               # letter O, not a number
+
+    def test_prefix_is_part_of_the_code(self):
+        self.assertNotEqual(id_key("M12"), id_key("HM12"))
+        self.assertEqual(id_key("PBS1"), id_key("PBS01"))
+
+    def test_spacing_and_padding_link_the_same_code(self):
+        p = self.one("PBS 3 | Cable sheath, main switchboard engine room | PCB 12 mg/kg")
+        self.assertEqual((p.sample_id, p.confidence), ("PBS03", "medium"))
+
+    def test_prefix_conflict_gets_no_link_and_says_why(self):
+        p = self.one("M12 | Red-brown paint, cargo hold 1, heavy metals | Pb 640 mg/kg")
+        self.assertEqual(p.status, "none")
+        self.assertIn("row:0:prefix_conflict", p.flags)
+        self.assertEqual({a[0] for a in p.alts}, {"M12", "HM12"})
+        self.assertIn("differ only by prefix", p.reason)
+
+    def test_id_decides_when_description_fits_both_equally(self):
+        p = self.one("HM12 | Red-brown paint, cargo hold 1 | Pb 640 mg/kg")
+        self.assertEqual((p.sample_id, p.confidence), ("HM12", "high"))
+
+    def test_matching_prefix_and_description_links(self):
+        p = self.one("M12 | Bulkhead paint cargo hold 1, asbestos check | Not detected")
+        self.assertEqual(p.sample_id, "M12")
+
+    def test_unregistered_code_of_a_known_family_is_not_guessed(self):
+        p = self.one("OS02 | Hydraulic oil, steering gear | PCB < 1 mg/kg")
+        self.assertEqual(p.status, "none")
+        self.assertIn("row:0:unregistered", p.flags)
+        self.assertIn("not registered", p.reason)
+        self.assertEqual(p.alts[0][0], "OS01")              # shown as a hint, not proposed
+
+    def test_unknown_code_with_other_prefix_same_number_is_not_guessed(self):
+        # No M codes at all here, but the description fits HM12: still another test.
+        reg = typed_register("M01", "M12")
+        p = self.one("M12 | Red-brown paint, cargo hold 1, heavy metals | Pb 640 mg/kg", reg)
+        self.assertEqual(p.status, "none")
+        self.assertIn("prefix HM", p.reason)
+
+    def test_code_from_another_system_may_still_match_on_description(self):
+        # A lab's own numbering (XY7) says nothing about our register: low-confidence guess stays.
+        p = self.one("XY7 | Hydraulic oil, steering gear | PCB < 1 mg/kg")
+        self.assertEqual((p.sample_id, p.confidence), ("OS01", "low"))
+
+    def test_malformed_code_may_still_match_on_description(self):
+        p = link("", SHIP["samples"], "---\nS-O3 | Boiler door seal, black | X").proposals[0]
+        self.assertEqual((p.sample_id, p.confidence), ("S-03", "low"))
 
 
 if __name__ == "__main__":

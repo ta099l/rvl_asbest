@@ -74,16 +74,45 @@ def score(lab_desc: str, reg_text: str) -> float:
     return sum(1 for w in a if w in b) / len(a)
 
 
+def code_parts(s: str) -> Optional[Tuple[str, str]]:
+    """Split a code into prefix and number: 'PBS 03' -> ('PBS', '3'), 'CH6-05' -> ('CH6', '5').
+
+    The prefix says which test it is (M asbestos, HM heavy metals, ...), the
+    number which sample. None when the code does not end in a number (e.g. 'S-O3').
+    """
+    t = str(s).upper().strip()
+    parts = [p for p in re.split(r"[^A-Z0-9]+", t) if p]
+    if len(parts) >= 2 and parts[-1].isdigit():
+        return "".join(parts[:-1]), parts[-1].lstrip("0") or "0"
+    m = re.match(r"^([A-Z]+)([0-9]+)$", t)
+    if m:
+        return m.group(1), m.group(2).lstrip("0") or "0"
+    return None
+
+
 def id_key(s: str) -> str:
     """Compare IDs ignoring case, separators and zero padding."""
+    cp = code_parts(s)
+    if cp:
+        return cp[0] + "|" + cp[1]
     t = str(s).upper().strip()
     parts = [p for p in re.split(r"[^A-Z0-9]+", t) if p]
     if len(parts) >= 2:
         return "".join(parts[:-1]) + "|" + re.sub(r"^0+(?=[0-9])", "", parts[-1])
-    m = re.match(r"^([A-Z]+)([0-9]+)$", t)
-    if m:
-        return m.group(1) + "|" + re.sub(r"^0+(?=[0-9])", "", m.group(2))
     return t
+
+
+def prefix_siblings(code: str, register: List["Sample"]) -> List["Sample"]:
+    """Register samples with the same number but another prefix (M12 -> HM12)."""
+    cp = code_parts(code)
+    if not cp:
+        return []
+    out = []
+    for s in register:
+        sp = code_parts(s.id)
+        if sp and sp[1] == cp[1] and sp[0] != cp[0]:
+            out.append(s)
+    return out
 
 
 def pct(x: float) -> str:
@@ -117,6 +146,23 @@ def _has_id(r: LabRow) -> bool:
     return bool(t) and t not in ("-", "—")
 
 
+def _unregistered_code(raw_id: str, best: str, prefixes: set) -> Optional[str]:
+    """Why a well-formed but unknown lab code must not be guessed from its description.
+
+    OS02 next to a register with OS01 is most likely a sample nobody registered,
+    not a typo for OS01. M12 when the description fits HM12 is another test.
+    Malformed codes (S-O3) and codes from another system (GS15) are not caught.
+    """
+    lab, reg = code_parts(raw_id), code_parts(best)
+    if not lab:
+        return None
+    if reg and lab[1] == reg[1] and lab[0] != reg[0]:
+        return f"{best} has the same number but prefix {reg[0]}, and the lab wrote {lab[0]}."
+    if lab[0] in prefixes:
+        return f"The register uses {lab[0]} codes, so this looks like a sample that was not registered."
+    return None
+
+
 def link(project: str, register: List[Sample], text: str) -> LinkRun:
     head, rows = parse_report(text)
     props: List[Proposal] = []
@@ -146,6 +192,17 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
             p.alts = [(s.id, mine), best]
             p.flags.append(f"row:{p.index}:conflict")
             continue
+        # M12 and HM12 are different tests on the same spot: a better fit for the
+        # sibling means the ID and the description disagree.
+        sib = max(((t.id, dict(p.scores)[t.id]) for t in prefix_siblings(s.id, register)),
+                  key=lambda x: x[1], default=None)
+        if sib and sib[1] > mine:
+            p.reason = (f"ID says {s.id} but the description fits {sib[0]} better ({pct(sib[1])} "
+                        f"against {pct(mine)}). {s.id} and {sib[0]} differ only by prefix, which "
+                        "marks a different test, so no link is proposed. Ask the lab which test this is.")
+            p.alts = [(s.id, mine), sib]
+            p.flags.append(f"row:{p.index}:prefix_conflict")
+            continue
         p.status, p.sample_id = "propose", s.id
         if exact:
             p.confidence = "high" if mine >= 0.5 else "low"
@@ -172,10 +229,12 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
                 p.flags.append(f"row:{p.index}:duplicate")
 
     claimed = {p.sample_id: p.index for p in props if p.status == "propose"}
+    prefixes = {cp[0] for cp in (code_parts(s.id) for s in register) if cp}
 
     # pass 2: description only (no ID, or unknown ID)
     for p in props:
-        if p.status != "none" or any(f.endswith(":conflict") or f.endswith(":duplicate") for f in p.flags):
+        if p.status != "none" or any(f.split(":")[-1] in ("conflict", "duplicate", "prefix_conflict")
+                                     for f in p.flags):
             continue
         r = p.row
         best, second = p.scores[0], (p.scores[1] if len(p.scores) > 1 else ("", 0.0))
@@ -185,6 +244,13 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
                 p.reason = (f"{pre}The description matches {best[0]} ({pct(best[1])}), but that sample "
                             f"is already linked by ID to row {claimed[best[0]] + 1}. No link proposed.")
                 p.flags.append(f"row:{p.index}:collision")
+                continue
+            why = _unregistered_code(r.raw_id, best[0], prefixes) if _has_id(r) else None
+            if why:
+                p.reason = (f"{pre}{why} The description fits {best[0]} ({pct(best[1])}), but the ID "
+                            "and the description disagree, so no link is proposed.")
+                p.alts = [best]
+                p.flags.append(f"row:{p.index}:unregistered")
                 continue
             p.status, p.sample_id, p.confidence = "propose", best[0], "low"
             p.reason = (f"{pre}Matched on description only: {best[0]} ({pct(best[1])}, next best "
