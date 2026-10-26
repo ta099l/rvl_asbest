@@ -1,0 +1,74 @@
+# Glossary
+
+Every term used in this project, in one plain sentence with an everyday comparison. Kept up to date with each new term.
+
+## The work itself
+
+| Term | What it means | Like... |
+|---|---|---|
+| **Register** | The inspector's list of samples for one object: code, location, material, colour. | The guest list at a party. |
+| **Sample code** | The code on the sticker of a sample, e.g. `S-02`, `M12`, `PBS03`. | A cloakroom ticket number. |
+| **Prefix** | The letters in front of a code that say which test it is (`M` asbestos, `HM` heavy metals, `PBS` PCB). | The department on a hospital wristband. |
+| **Lab line** | One result line from the lab report: ID as the lab wrote it, description, result. | A returned parcel with a handwritten label. |
+| **Link** | The connection between one lab line and one sample in the register. | Matching a coat to its cloakroom ticket. |
+| **Proposal** | A link the system suggests; it is never final until an inspector decides. | A spell-checker's suggestion: you still click "accept". |
+| **No link (abstain)** | The system deliberately proposes nothing, with a reason. | A shop assistant saying "I'm not sure, let me ask" instead of guessing. |
+| **Inspector decision** | A named person approves, corrects or rejects a proposal. | A doctor signing a prescription. |
+| **Audit log** | The list of every decision: who, what, when. Nothing is ever deleted. | A ship's logbook. |
+| **Append-only** | New entries are added; old ones are never changed or removed. | Writing in pen in a notebook: you add a correction, you don't erase. |
+| **Draft report** | The overview of linked results plus the open items still to decide. | A to-do list with the finished items ticked. |
+| **Asset file** | The object's history of approved results over time, in versions. | A car's service book. |
+| **Survey** | One visit to one object at one place and time (proposal for Ivan). | One appointment in a patient's medical file. |
+
+## How we link
+
+| Term | What it means | Like... |
+|---|---|---|
+| **Rule-based linker** | Code with fixed rules (compare codes, count matching words); no AI. | A recipe followed step by step. |
+| **Normalise** | Make two spellings comparable: `S02`, `s-02`, `S 02` all become `S|2`. | Ignoring capitals and spaces when you compare names. |
+| **Confidence** | How sure a proposal is: high (exact code, text agrees), medium (code tidied up), low (text only). | Weather forecast: "sure", "likely", "maybe". |
+| **Conflicting evidence** | The code says one sample, the description another. We then propose no link. | Two witnesses telling different stories. |
+| **Prefix conflict** | `M12` written, but the text fits `HM12`: same number, another test. No link. | Two flats, 12A and 12B: same number, different door. |
+| **Unregistered code** | A proper code (like `OS02`) that is not in the register. No link, even if the text fits. | A ticket number the cloakroom never handed out. |
+| **AI (language model)** | A program that writes text answers to text questions, trained on a lot of text. | A very well-read assistant who sometimes confidently gets things wrong. |
+| **Prompt** | The exact text we send to the model: the task, the register, the lab lines, the answer format. | The instructions you give that assistant. |
+| **Prompt version** | One saved wording of the prompt (`v1_baseline`); a change makes a new version. | Drafts of an essay: v1, v2, v3. |
+| **Template** | A prompt with blanks (`{{REGISTER}}`, `{{LINES}}`) filled in per report. | A form letter with "Dear ___". |
+| **Client** | The small piece of code that talks to the model; one method, `complete(text)`. | A phone: you can swap the phone without changing what you say. |
+| **Stand-in** | A fake client used until the real AI is approved. | A rehearsal actor before the star arrives. |
+| **Replay** | A stand-in that gives back answers you recorded earlier in the prompt lab. | Playing a voicemail instead of calling. |
+| **Prompt lab** | A chat window where you paste a prompt by hand and copy the answer. | A test kitchen before the restaurant opens. |
+| **Fingerprint (key)** | A short code computed from the exact prompt text; one changed letter gives another key. | A fingerprint: it identifies exactly one person. |
+| **Hybrid** | Rules first; only lines the rules cannot settle go to the AI. Disagreement means no link. | A junior colleague who only asks the expert about the hard cases. |
+| **Guard** | A final check: one sample can be linked to only one line. | A cinema seat can't be sold twice. |
+| **API** | The official way for one program to call another over the internet (for the real model later). | A restaurant's order counter. |
+
+## How we check
+
+| Term | What it means | Like... |
+|---|---|---|
+| **Test** | A small program that checks one behaviour automatically and says OK or FAIL. | A smoke alarm test button. |
+| **Test case** | One lab line with the correct answer an inspector would give. | One exam question with its answer key. |
+| **Reference answer (truth)** | That correct answer; `null` means no sample is right. | The answer key. |
+| **Correct / wrong** | The proposal matches / does not match the reference. Wrong is the worst outcome. | Right or wrong answer on the exam. |
+| **Abstained ok / missed** | No link, and none existed / no link, but one did exist (the inspector links by hand). | Leaving a question blank when there was no answer / when you could have known. |
+| **Baseline** | The score of the simplest approach (rules only) that anything new must beat. | Your time on the first run, before training. |
+| **dev / dev2 set** | Test cases we may look at and improve against. | Practice exams. |
+| **Hold-out set** | Test cases kept aside; used once per final version, never to tune. | The real exam: you don't see it before. |
+| **Run record** | A saved result of one scoring run, with time and commit. | A dated lab measurement in a notebook. |
+| **Iteration log** | Generated overview of all prompt versions and their results (Appendix A). | A training diary. |
+
+## Tools
+
+| Term | What it means | Like... |
+|---|---|---|
+| **JSON** | A text format for structured data: `{"sample": "S-02"}`. | A neatly filled-in form. |
+| **Schema** | Rules for what valid JSON looks like (which fields, which values). | The rules printed on the form: "date in DD-MM-YYYY". |
+| **Contract** | The agreed request and response format between Ivan's app and the AI part. | A delivery agreement: what is sent, what comes back. |
+| **Validation** | Checking an answer against the contract; anything broken becomes no link. | Customs checking a parcel against its papers. |
+| **Repository (repo)** | The project folder with its full history. | A binder with every version of every page. |
+| **Git** | The tool that keeps that history. | The binder's librarian. |
+| **Commit** | One saved snapshot with a message saying what changed. | A dated entry in a diary. |
+| **Branch** | A separate line of work (`tasnim/ai`) that does not touch `main`. | A copy of the essay you edit without touching the handed-in version. |
+| **Virtual environment (.venv)** | A private Python install for this project only. | A separate toolbox for one job. |
+| **Command line / terminal** | The text window where you type commands. | Texting the computer instead of clicking. |
