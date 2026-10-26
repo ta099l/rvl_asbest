@@ -14,11 +14,12 @@ def evaluate(run: LinkRun, truth: Dict[int, Optional[str]]) -> dict:
     """
     out = {"correct": 0, "wrong": 0, "abstained_ok": 0, "abstained_missed": 0, "rows": len(run.proposals)}
     for p in run.proposals:
-        t = truth.get(p.index)
-        if p.status == "propose":
-            out["correct" if p.sample_id == t else "wrong"] += 1
-        elif t is None:
-            out["abstained_ok"] += 1
-        else:
-            out["abstained_missed"] += 1
+        out[outcome(p.sample_id if p.status == "propose" else None, truth.get(p.index))] += 1
     return out
+
+
+def outcome(proposed: Optional[str], truth: Optional[str]) -> str:
+    """One line's outcome; None means no link (proposed) or no right sample (truth)."""
+    if proposed is not None:
+        return "correct" if proposed == truth else "wrong"
+    return "abstained_ok" if truth is None else "abstained_missed"

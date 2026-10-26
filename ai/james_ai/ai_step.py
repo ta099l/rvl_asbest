@@ -104,17 +104,19 @@ class ReplayClient:
     answer cannot be replayed for a changed prompt by accident.
     """
 
-    def __init__(self, path: Path):
-        with open(path, encoding="utf-8") as f:
-            self.answers = json.load(f)["answers"]
+    def __init__(self, path: Optional[Path] = None):
+        self.answers: dict = {}          # no file: every prompt has no answer
+        if path is not None:
+            with open(path, encoding="utf-8") as f:
+                self.answers = json.load(f)["answers"]
         self.prompts: List[str] = []     # what was asked, for checking afterwards
 
     def complete(self, text: str) -> str:
         self.prompts.append(text)
         key = prompt_key(text)
-        if key not in self.answers:
+        answer = self.answers.get(key, {}).get("answer")
+        if answer is None:               # missing, or exported but not filled in yet
             raise NoRecordedAnswer(f"no recorded answer for prompt {key}")
-        answer = self.answers[key]["answer"]
         return answer if isinstance(answer, str) else json.dumps(answer)
 
 

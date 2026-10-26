@@ -22,3 +22,11 @@ One entry per decision: date, what, why, who agreed.
 - **Why:** with the old format every v1 answer broke the contract and became no link. The key makes sure an answer recorded for one prompt version is never reused for another, so each result in Appendix A belongs to the prompt that produced it.
 - **Note:** prompt-lab answers recorded in the old list format before this change would be rejected; record them again with the new format.
 - **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-10-26: Hybrid pipeline, rules first and AI second
+
+- **What:** high-confidence rule links and rule no-links caused by conflicting evidence (conflict, duplicate, prefix conflict, collision, unregistered code) never go to the AI. All other lines go to the AI in one request. Rules and AI agree: link stays. They disagree: no link. Only the AI links: the AI's proposal. AI answer unusable: the rules' proposal stays. Guard: a sample proposed for two lines unlinks both.
+- **Why:** the AI should only work where the rules are unsure, and two sources that disagree are conflicting evidence (safety rule 2). The AI cannot make contradicting evidence agree.
+- **Also:** an unknown code of a prefix family the register uses (S-09 next to S-01..S-08) is now always flagged `unregistered`, so the AI never links it either.
+- **Status:** no recorded AI answers yet, so the AI and hybrid numbers are not yet meaningful. Fill `ai/replays/dev_v1.json` and `dev2_v1.json` from the prompt lab.
+- **Agreed by:** Tasnim (owner of `ai/`).

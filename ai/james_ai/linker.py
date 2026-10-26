@@ -263,6 +263,12 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
             p.flags.append(f"row:{p.index}:ambiguous")
         else:
             p.reason = f"{pre}No sample in the register fits the description well enough. No link proposed."
+        # same rule B as above, also when the description did not point anywhere,
+        # so a later step (the AI) cannot link an unregistered code either
+        lab = code_parts(r.raw_id) if p.status == "none" and _has_id(r) else None
+        if lab and lab[0] in prefixes:
+            p.reason += f" The register uses {lab[0]} codes, so this looks like a sample that was not registered."
+            p.flags.append(f"row:{p.index}:unregistered")
 
     header_flags: List[str] = []
     hp = head.get("project")
