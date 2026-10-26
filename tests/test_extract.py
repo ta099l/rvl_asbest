@@ -4,10 +4,10 @@ import shutil
 import tempfile
 import unittest
 
-from james.demo_data import SHIP
-from james.evaluate import evaluate
+from ai.james_ai.demo_data import SHIP
+from ai.james_ai.evaluate import evaluate
 from james.extract import extract_lab_text
-from james.linker import link, parse_report
+from ai.james_ai.linker import link, parse_report
 from tests.helpers import make_scan_pdf, make_text_pdf
 
 TEXT = SHIP["reports"]["b1"]["text"]

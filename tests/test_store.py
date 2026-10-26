@@ -1,6 +1,6 @@
 import unittest
 
-from james.demo_data import SHIP
+from ai.james_ai.demo_data import SHIP
 from james.store import Store
 
 

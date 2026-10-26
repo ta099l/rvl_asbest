@@ -1,6 +1,6 @@
 """Walk through the whole flow on the fictional ship case:
 lab report -> proposals with reasons -> inspector decisions -> draft report -> asset file."""
-from james.demo_data import SHIP
+from ai.james_ai.demo_data import SHIP
 from james.store import Store
 
 s = Store()  # in memory; pass a file path to keep the data

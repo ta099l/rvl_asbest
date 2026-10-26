@@ -1,8 +1,8 @@
 import unittest
 
-from james.demo_data import SHIP, VIADUCT
-from james.evaluate import evaluate
-from james.linker import id_key, link, samples_without_proposal
+from ai.james_ai.demo_data import SHIP, VIADUCT
+from ai.james_ai.evaluate import evaluate
+from ai.james_ai.linker import id_key, link, samples_without_proposal
 
 
 def run_case(case, key):
