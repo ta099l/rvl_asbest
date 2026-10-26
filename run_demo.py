@@ -118,12 +118,16 @@ def flow(ask: Callable[[str], str] = input, out: Callable = print,
             got = f"{p['sample']} ({p['confidence']})" if p["sample"] else "NO LINK"
             out(f"  Proposal: {got}   from: {run.source[n]}")
             out(textwrap.fill(p["reason"], 100, initial_indent="  Reason: ", subsequent_indent="          "))
+            if p["sample"] is None:
+                out("  Nothing to approve here: c = link it yourself, r = confirm no link, s = decide later.")
+            menu = "  [a]pprove  [c]orrect  [r]eject  [s]kip > " if p["sample"] else "  [c]orrect  [r]eject  [s]kip > "
             while True:
-                choice = ask("  [a]pprove  [c]orrect  [r]eject  [s]kip > ").strip().lower()[:1]
+                choice = ask(menu).strip().lower()[:1]
                 try:
                     if choice == "a":
                         if p["sample"] is None:
-                            out("  Nothing is proposed for this line: correct it or reject it.")
+                            out("  Nothing is proposed for this line, so it cannot be approved. "
+                                "Type c to link it yourself, r to confirm no link, or s to skip.")
                             continue
                         if p["sample"] == r["proposed_code"]:
                             s.decide(rid, r["idx"], "approved", by=name)

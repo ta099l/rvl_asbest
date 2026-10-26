@@ -49,9 +49,20 @@ class Flow(unittest.TestCase):
             (4, "approved", "S-04"), (5, "approved", "S-05"), (6, "corrected", "S-06"),
             (7, "rejected", None), (8, "corrected", "S-08"), (9, "approved", "S-07")])
         self.assertTrue(all(e["decided_by"] == "Demo Inspector" for e in store.audit_log()))
-        self.assertIn("Nothing is proposed for this line", text)   # line 8: 'a' was refused first
+        self.assertIn("Nothing is proposed for this line, so it cannot be approved", text)  # line 8: 'a' refused
         self.assertIn("== 3. Draft report", text)
         self.assertIn("== 4. Audit log", text)
+
+    def test_no_link_line_offers_only_correct_reject_skip(self):
+        asked = []
+        keys = keyboard("Ann", "a", "a", "a", "a", "a", "r", "no")
+
+        def ask(prompt):
+            asked.append(prompt)
+            return keys(prompt)
+        store = run_demo.flow(ask, out=lambda *a, sep=" ": None)
+        self.assertEqual(asked[6], "  [c]orrect  [r]eject  [s]kip > ")   # line 6 has no proposal
+        self.assertEqual(decisions(store)[-1], (6, "rejected", None))
 
     def test_a_name_is_required(self):
         _, text = run_flow("", "  ", "Ann")

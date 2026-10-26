@@ -94,7 +94,7 @@ Rules only, on made-up test lines:
 ## Questions the coach may ask
 
 - **"Why not just let the AI do it?"** An AI can be confidently wrong, and a wrong link is the worst outcome. The rules are predictable and explainable; the AI is only used where the rules are unsure, and disagreement means no link.
-- **"How do you know it works?"** 32 test lines with an inspector-style answer, scored in four outcomes, plus 117 automatic tests. The hold-out set was run once.
+- **"How do you know it works?"** 32 test lines with an inspector-style answer, scored in four outcomes, plus 118 automatic tests. The hold-out set was run once.
 - **"What did you learn about prompting?"** The prompt and the answer format are versioned. Every answer is tied to the exact prompt by a fingerprint, so results can't get mixed up between versions. The iteration log (`docs/iteration-log.md`) is the evidence for Appendix A.
 - **"What's Ivan's part and what's yours?"** Ivan: the app, the database, upload, hosting. Me: the linking logic, the prompts, the evaluation and the test cases. The agreed format between the two parts is in `contract/`.
 - **"What if the inspector is in a hurry?"** Nothing is final without a named decision, and a no-link proposal can't be approved with one key press.

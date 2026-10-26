@@ -15,7 +15,7 @@ The prompt now starts with `(.venv)`. Do this once per new terminal.
 python3 -m unittest discover -s tests -t .
 ```
 
-Expected: `Ran 117 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
+Expected: `Ran 118 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
 
 One file at a time, with the name of each test (`-v`):
 
