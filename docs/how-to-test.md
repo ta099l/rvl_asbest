@@ -1,4 +1,4 @@
-# How to test what is built (Chunks 0 to 6)
+# How to test what is built
 
 Run everything from the project folder, in the VS Code terminal (WSL):
 
@@ -15,7 +15,7 @@ The prompt now starts with `(.venv)`. Do this once per new terminal.
 python3 -m unittest discover -s tests -t .
 ```
 
-Expected: `Ran 103 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
+Expected: `Ran 117 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
 
 One file at a time, with the name of each test (`-v`):
 
@@ -118,3 +118,13 @@ python3 -m ai.james_ai.iteration_log
 ```
 
 The first two save a run to `ai/runs/` (now kept in git). The last one rebuilds `docs/iteration-log.md` from all saved runs and prompt versions. Check that its tables match what the commands printed. Hold-out runs appear with totals only.
+
+## 9. Interactive demo as an inspector
+
+```
+python3 run_demo.py --flow
+```
+
+Type your name, then for each line `a` (approve), `c` (correct: type the right code and a note), `r` (reject, with a note) or `s` (skip). At the end you see the draft report and the audit log with your name on every decision. Try `a` on line 8: it is refused, because the rules (S-08) and the stand-in AI (no link) disagree, so nothing is proposed. The AI answers come from `ai/replays/demo_ship.json`: hand-written stand-ins, not model output.
+
+Imported prompt-lab answers: `python3 -m ai.james_ai.import_answers answers.txt` (see the top of `ai/james_ai/import_answers.py` for the file format).

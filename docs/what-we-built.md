@@ -21,3 +21,8 @@ Three lines per item: what it does, why it exists, one example.
 - **What:** rebuilds `docs/iteration-log.md` from every saved run in `ai/runs/` and every prompt in `ai/prompts/`: per prompt version the change note, the full prompt, a results table, and the wrong and missed cases with reasons. `score` and `compare` got `--save`, and `ai/runs/` is now kept in git.
 - **Why:** graders want visible, reproducible iteration; numbers typed by hand into a report can drift from what was really measured.
 - **Example:** the v1_baseline section shows dev2 hybrid 8 / 0 / 2 / 1 with AI answers 0/11 at commit 713da6b, and lists e3 as missed with "M12 and HM12 differ only by prefix".
+
+## 5. Interactive demo (`python3 run_demo.py --flow`)
+- **What:** runs the hybrid on the fictional ship with stand-in AI answers, shows each line's proposal, source (rules, both, disagree) and reason, and lets a typed, named inspector approve, correct, reject or skip from the keyboard; then prints the draft report and the audit log. Plain `python3 run_demo.py` is unchanged.
+- **Why:** it shows the whole chain and the one rule that matters (nothing is final without a named inspector) in a few minutes, for Rolf, Ivan or the interview.
+- **Example:** line 8 (`- | Pump packing, pump room`): rules say S-08, the stand-in AI says no link, so the proposal is NO LINK; `a` is refused, `c` + `S-08` + a note is recorded as "corrected" under the inspector's name.

@@ -1,0 +1,38 @@
+{
+  "note": "Hand-written stand-in answers for run_demo.py --flow, to show the flow. NOT model output: never use for scoring.",
+  "answers": {
+    "5ff10af92c3bd7d3": {
+      "prompt": "v1_baseline",
+      "report_id": "LAB-2026-0412",
+      "text": "You link lab result lines to samples. Below is the sample register of one ship and the lines of a lab report. For each lab line, say which sample in the register it belongs to.\n\nREGISTER (code | location | material | colour)\nS-01 | Engine room, port bulkhead | Insulation wrap | grey fibrous\nS-02 | Engine room, main engine exhaust | Pipe lagging | white\nS-03 | Boiler room, boiler door | Gasket | black\nS-04 | Accommodation deck 2, corridor | Ceiling panel | white-grey board\nS-05 | Accommodation deck 2, cabin 214 | Floor covering | green vinyl\nS-06 | Steering gear room | Flange gasket | grey\nS-07 | Cargo hold 1 | Paint coating | red-brown\nS-08 | Pump room | Pump packing | grey-white woven\n\nLAB LINES (sample ID as written by the lab | description | result)\n1. S02 | Exhaust pipe lagging, engine room | Asbestos not detected\n2. s-03 | Boiler door gasket, black | Chrysotile 40%\n3. S 04 | Ceiling panel, corridor deck 2 | Asbestos not detected\n4. - | Pump packing, pump room, grey-white woven | Asbestos not detected\n\nReply with only a JSON object with one proposal per lab line, in order:\n{\"proposals\":[{\"n\":1,\"sample\":\"S-01\",\"confidence\":\"high\",\"reason\":\"one short sentence\"}]}\n\"sample\" is a register code, or null when no register sample is linked to that line. \"confidence\" is \"high\", \"medium\" or \"low\".\n",
+      "answer": {
+        "proposals": [
+          {
+            "n": 1,
+            "sample": "S-02",
+            "confidence": "high",
+            "reason": "S02 is S-02 and the exhaust pipe lagging matches."
+          },
+          {
+            "n": 2,
+            "sample": "S-03",
+            "confidence": "high",
+            "reason": "s-03 is S-03 and the black boiler door gasket matches."
+          },
+          {
+            "n": 3,
+            "sample": "S-04",
+            "confidence": "medium",
+            "reason": "S 04 reads as S-04 and the corridor ceiling panel matches."
+          },
+          {
+            "n": 4,
+            "sample": null,
+            "confidence": null,
+            "reason": "No sample ID on the lab line; the description alone is not enough to link."
+          }
+        ]
+      }
+    }
+  }
+}
