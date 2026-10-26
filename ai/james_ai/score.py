@@ -70,7 +70,9 @@ def git_commit() -> Optional[str]:
     try:
         sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
                              capture_output=True, text=True, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+        # saved runs and the log built from them are records, not code: they do not
+        # make the commit "changed"
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", ".", ":!ai/runs", ":!docs/iteration-log.md"], cwd=ROOT,
                                capture_output=True, text=True, check=True).stdout.strip()
         return sha + ("+changes" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
