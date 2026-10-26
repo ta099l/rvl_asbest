@@ -1,0 +1,353 @@
+{
+  "registers": {
+    "ship_s_codes": [
+      {
+        "code": "S-01",
+        "location": "Engine room, port bulkhead",
+        "material": "Insulation wrap",
+        "colour": "grey fibrous"
+      },
+      {
+        "code": "S-02",
+        "location": "Engine room, main engine exhaust",
+        "material": "Pipe lagging",
+        "colour": "white"
+      },
+      {
+        "code": "S-03",
+        "location": "Boiler room, boiler door",
+        "material": "Gasket",
+        "colour": "black"
+      },
+      {
+        "code": "S-04",
+        "location": "Accommodation deck 2, corridor",
+        "material": "Ceiling panel",
+        "colour": "white-grey board"
+      },
+      {
+        "code": "S-05",
+        "location": "Accommodation deck 2, cabin 214",
+        "material": "Floor covering",
+        "colour": "green vinyl"
+      },
+      {
+        "code": "S-06",
+        "location": "Steering gear room",
+        "material": "Flange gasket",
+        "colour": "grey"
+      },
+      {
+        "code": "S-07",
+        "location": "Cargo hold 1",
+        "material": "Paint coating",
+        "colour": "red-brown"
+      },
+      {
+        "code": "S-08",
+        "location": "Pump room",
+        "material": "Pump packing",
+        "colour": "grey-white woven"
+      }
+    ],
+    "ship_typed_codes": [
+      {
+        "code": "M01",
+        "location": "Engine room, port bulkhead",
+        "material": "Insulation wrap",
+        "colour": "grey fibrous"
+      },
+      {
+        "code": "M02",
+        "location": "Boiler room, boiler door",
+        "material": "Gasket",
+        "colour": "black"
+      },
+      {
+        "code": "M12",
+        "location": "Cargo hold 1",
+        "material": "Bulkhead paint, asbestos check",
+        "colour": "red-brown"
+      },
+      {
+        "code": "HM12",
+        "location": "Cargo hold 1",
+        "material": "Bulkhead paint, heavy metals",
+        "colour": "red-brown"
+      },
+      {
+        "code": "PBS01",
+        "location": "Accommodation deck 2, corridor",
+        "material": "Cable sheath",
+        "colour": "grey"
+      },
+      {
+        "code": "PBS03",
+        "location": "Engine room, main switchboard",
+        "material": "Cable sheath",
+        "colour": "black"
+      },
+      {
+        "code": "KM01",
+        "location": "Accommodation deck 2, cabin 214",
+        "material": "Dust on ventilation grille",
+        "colour": "grey dust"
+      },
+      {
+        "code": "OS01",
+        "location": "Steering gear room",
+        "material": "Hydraulic oil",
+        "colour": "amber"
+      },
+      {
+        "code": "ODS01",
+        "location": "Pump room",
+        "material": "Foam insulation round pipes",
+        "colour": "yellow"
+      },
+      {
+        "code": "SS01",
+        "location": "Engine room, transformer",
+        "material": "Swipe sample, transformer casing",
+        "colour": "-"
+      }
+    ]
+  },
+  "sets": {
+    "dev": {
+      "register": "ship_s_codes"
+    },
+    "hold": {
+      "register": "ship_s_codes"
+    },
+    "dev2": {
+      "register": "ship_typed_codes"
+    }
+  },
+  "cases": [
+    {
+      "id": "d1",
+      "set": "dev",
+      "tag": "clean",
+      "line": "S-01 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "S-01"
+    },
+    {
+      "id": "d2",
+      "set": "dev",
+      "tag": "separator",
+      "line": "S02 | Exhaust pipe lagging, engine room | Asbestos not detected",
+      "truth": "S-02"
+    },
+    {
+      "id": "d3",
+      "set": "dev",
+      "tag": "case",
+      "line": "s-03 | Boiler door gasket, black | Chrysotile 40%",
+      "truth": "S-03"
+    },
+    {
+      "id": "d4",
+      "set": "dev",
+      "tag": "spacing",
+      "line": "S 04 | Ceiling panel, corridor deck 2 | Asbestos not detected",
+      "truth": "S-04"
+    },
+    {
+      "id": "d5",
+      "set": "dev",
+      "tag": "ID conflict",
+      "line": "S-05 | Flange gasket, steering gear room | Asbestos not detected",
+      "truth": "S-06"
+    },
+    {
+      "id": "d6",
+      "set": "dev",
+      "tag": "unknown ID",
+      "line": "S-09 | Hatch coaming seal, hold 2 | Asbestos not detected",
+      "truth": null
+    },
+    {
+      "id": "d7",
+      "set": "dev",
+      "tag": "no ID",
+      "line": "- | Pump packing, pump room, grey-white woven | Asbestos not detected",
+      "truth": "S-08"
+    },
+    {
+      "id": "d8",
+      "set": "dev",
+      "tag": "clean",
+      "line": "S-07 | Bulkhead coating, cargo hold 1, red-brown | Asbestos not detected",
+      "truth": "S-07"
+    },
+    {
+      "id": "d9",
+      "set": "dev",
+      "tag": "Dutch",
+      "line": "S-08 | Pompafdichting, pompruimte | Asbest niet aangetoond",
+      "truth": "S-08"
+    },
+    {
+      "id": "d10",
+      "set": "dev",
+      "tag": "Dutch, typo",
+      "line": "S-0 4 | Plafondplaat, gang dek 2 | Asbest niet aangetoond",
+      "truth": "S-04"
+    },
+    {
+      "id": "d11",
+      "set": "dev",
+      "tag": "too vague",
+      "line": "- | Gasket | Asbestos not detected",
+      "truth": null
+    },
+    {
+      "id": "d12",
+      "set": "dev",
+      "tag": "letter O",
+      "line": "S-O3 | Boiler door seal, black | Chrysotile 40%",
+      "truth": "S-03"
+    },
+    {
+      "id": "h1",
+      "set": "hold",
+      "tag": "synonym",
+      "line": "S-02 | Exhaust lagging, main engine | Asbestos not detected",
+      "truth": "S-02"
+    },
+    {
+      "id": "h2",
+      "set": "hold",
+      "tag": "separator",
+      "line": "S06 | Flange gasket, steering gear | Asbestos not detected",
+      "truth": "S-06"
+    },
+    {
+      "id": "h3",
+      "set": "hold",
+      "tag": "no zero",
+      "line": "S-5 | Green vinyl floor, cabin 214 | Chrysotile 2%",
+      "truth": "S-05"
+    },
+    {
+      "id": "h4",
+      "set": "hold",
+      "tag": "ID conflict",
+      "line": "S-03 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "S-01"
+    },
+    {
+      "id": "h5",
+      "set": "hold",
+      "tag": "no ID",
+      "line": "- | Ceiling board, accommodation deck 2 corridor | Asbestos not detected",
+      "truth": "S-04"
+    },
+    {
+      "id": "h6",
+      "set": "hold",
+      "tag": "unknown ID",
+      "line": "S-11 | Paint sample, hold 3 | Asbestos not detected",
+      "truth": null
+    },
+    {
+      "id": "h7",
+      "set": "hold",
+      "tag": "clean",
+      "line": "S-07 | Paint coating, red-brown, cargo hold 1 | Asbestos not detected",
+      "truth": "S-07"
+    },
+    {
+      "id": "h8",
+      "set": "hold",
+      "tag": "Dutch",
+      "line": "S-01 | Isolatiemateriaal, machinekamer schot bakboord | Chrysotile 15%",
+      "truth": "S-01"
+    },
+    {
+      "id": "h9",
+      "set": "hold",
+      "tag": "too vague",
+      "line": "- | Hatch cover seal | Asbestos not detected",
+      "truth": null
+    },
+    {
+      "id": "e1",
+      "set": "dev2",
+      "tag": "clean",
+      "line": "M01 | Insulation wrap, engine room | Chrysotile 12%",
+      "truth": "M01"
+    },
+    {
+      "id": "e2",
+      "set": "dev2",
+      "tag": "prefix",
+      "line": "HM12 | Red-brown paint, cargo hold 1 | Pb 640 mg/kg",
+      "truth": "HM12"
+    },
+    {
+      "id": "e3",
+      "set": "dev2",
+      "tag": "prefix conflict",
+      "line": "M12 | Red-brown paint, cargo hold 1, heavy metals | Pb 640 mg/kg",
+      "truth": "HM12"
+    },
+    {
+      "id": "e4",
+      "set": "dev2",
+      "tag": "missing zero",
+      "line": "PBS1 | Cable sheath, corridor deck 2 | PCB 12 mg/kg",
+      "truth": "PBS01"
+    },
+    {
+      "id": "e5",
+      "set": "dev2",
+      "tag": "spacing",
+      "line": "PBS 03 | Cable, main switchboard engine room | PCB < 5 mg/kg",
+      "truth": "PBS03"
+    },
+    {
+      "id": "e6",
+      "set": "dev2",
+      "tag": "clean",
+      "line": "KM01 | Dust, vent grille cabin 214 | Asbestos not detected",
+      "truth": "KM01"
+    },
+    {
+      "id": "e7",
+      "set": "dev2",
+      "tag": "unknown ID",
+      "line": "OS02 | Hydraulic oil, steering gear | PCB < 1 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "e8",
+      "set": "dev2",
+      "tag": "no ID",
+      "line": "- | Foam pipe insulation, pump room | ODS not detected",
+      "truth": "ODS01"
+    },
+    {
+      "id": "e9",
+      "set": "dev2",
+      "tag": "missing zero",
+      "line": "ODS1 | Insulation foam round pipes, pump room | CFC-11 detected",
+      "truth": "ODS01"
+    },
+    {
+      "id": "e10",
+      "set": "dev2",
+      "tag": "clean",
+      "line": "SS01 | Swipe sample, transformer casing | PCB 8 ug/100cm2",
+      "truth": "SS01"
+    },
+    {
+      "id": "e11",
+      "set": "dev2",
+      "tag": "unknown ID",
+      "line": "M3 | Gasket, boiler door | Chrysotile 40%",
+      "truth": "M02"
+    }
+  ]
+}

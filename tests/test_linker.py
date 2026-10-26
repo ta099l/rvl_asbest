@@ -1,0 +1,122 @@
+import unittest
+
+from james.demo_data import SHIP, VIADUCT
+from james.evaluate import evaluate
+from james.linker import id_key, link, samples_without_proposal
+
+
+def run_case(case, key):
+    return link(case["project"], case["samples"], case["reports"][key]["text"])
+
+
+class IdKey(unittest.TestCase):
+    def test_variants_match(self):
+        self.assertEqual(id_key("S-03"), id_key("s-03"))
+        self.assertEqual(id_key("S02"), id_key("S-02"))
+        self.assertEqual(id_key("S 04"), id_key("S-04"))
+        self.assertEqual(id_key("CH6-5"), id_key("CH6-05"))
+
+    def test_different_ids_differ(self):
+        self.assertNotEqual(id_key("S-03"), id_key("S-30"))
+        self.assertNotEqual(id_key("CH6-01"), id_key("ZM-01"))
+
+
+class ShipFirstReport(unittest.TestCase):
+    def setUp(self):
+        self.run_ = run_case(SHIP, "b1")
+        self.p = self.run_.proposals
+
+    def test_clean_and_tidied_ids_are_proposed(self):
+        expected = {0: "S-01", 1: "S-02", 2: "S-03", 3: "S-04", 4: "S-05", 7: "S-08", 8: "S-07"}
+        for i, code in expected.items():
+            self.assertEqual(self.p[i].status, "propose", i)
+            self.assertEqual(self.p[i].sample_id, code, i)
+
+    def test_confidence_levels(self):
+        self.assertEqual(self.p[0].confidence, "high")     # exact ID
+        self.assertEqual(self.p[1].confidence, "medium")   # S02 normalised
+        self.assertEqual(self.p[7].confidence, "low")      # no ID, description only
+
+    def test_conflict_gets_no_link_and_shows_both(self):
+        c = self.p[5]
+        self.assertEqual(c.status, "none")
+        self.assertIn("row:5:conflict", c.flags)
+        self.assertEqual({a[0] for a in c.alts}, {"S-05", "S-06"})
+
+    def test_unknown_id_gets_no_link(self):
+        self.assertEqual(self.p[6].status, "none")
+        self.assertIn("row:6:unknown", self.p[6].flags)
+
+    def test_missing_sample_is_noticed(self):
+        missing = [s.id for s in samples_without_proposal(SHIP["samples"], self.run_)]
+        self.assertEqual(missing, ["S-06"])
+
+    def test_no_wrong_links(self):
+        r = evaluate(self.run_, SHIP["reports"]["b1"]["truth"])
+        self.assertEqual(r["wrong"], 0)
+        self.assertEqual((r["correct"], r["abstained_ok"], r["abstained_missed"]), (7, 1, 1))
+
+
+class ShipFollowUp(unittest.TestCase):
+    def test_all_exact(self):
+        r = run_case(SHIP, "b2")
+        self.assertEqual([p.sample_id for p in r.proposals], ["S-06", "S-03"])
+        self.assertEqual(evaluate(r, SHIP["reports"]["b2"]["truth"])["wrong"], 0)
+
+
+class ViaductReport(unittest.TestCase):
+    def setUp(self):
+        self.run_ = run_case(VIADUCT, "b1")
+        self.p = self.run_.proposals
+
+    def test_header_project_mismatch(self):
+        self.assertEqual(len(self.run_.header_flags), 1)
+        self.assertIn("swapped characters", self.run_.header_flags[0])
+
+    def test_ambiguous_description_gets_no_link(self):
+        self.assertEqual(self.p[4].status, "none")          # GS15: column 2 or column 3?
+        self.assertIn("row:4:ambiguous", self.p[4].flags)
+
+    def test_description_collision_gets_no_link(self):
+        self.assertEqual(self.p[7].status, "none")          # CH6-13 looks like CH6-11
+        self.assertIn("row:7:collision", self.p[7].flags)
+
+    def test_padding_fixed(self):
+        self.assertEqual(self.p[3].sample_id, "CH6-05")
+        self.assertEqual(self.p[3].confidence, "medium")
+
+    def test_no_wrong_links(self):
+        r = evaluate(self.run_, VIADUCT["reports"]["b1"]["truth"])
+        self.assertEqual(r["wrong"], 0)
+        self.assertEqual((r["correct"], r["abstained_ok"], r["abstained_missed"]), (6, 1, 1))
+
+
+class EdgeCases(unittest.TestCase):
+    base = "Project: 26-3VK\n---\n"
+
+    def test_empty_report(self):
+        r = link("26-3VK", SHIP["samples"], "")
+        self.assertEqual(r.proposals, [])
+
+    def test_two_rows_same_sample_get_no_link(self):
+        text = self.base + "S-01 | Insulation wrap, engine room bulkhead | A\nS-01 | Insulation wrap, engine room bulkhead | B"
+        r = link("26-3VK", SHIP["samples"], text)
+        self.assertEqual([p.status for p in r.proposals], ["none", "none"])
+        self.assertTrue(all(any(f.endswith(":duplicate") for f in p.flags) for p in r.proposals))
+
+    def test_id_without_description_is_low_confidence(self):
+        r = link("26-3VK", SHIP["samples"], self.base + "S-01 |  | Asbestos not detected")
+        self.assertEqual((r.proposals[0].status, r.proposals[0].confidence), ("propose", "low"))
+
+    def test_description_with_nothing_matching(self):
+        r = link("26-3VK", SHIP["samples"], self.base + "- | Anchor chain winch brake lining | X")
+        self.assertEqual(r.proposals[0].status, "none")
+
+    def test_wrong_id_with_matching_description_is_a_conflict_not_a_guess(self):
+        # Lab typed S-04, but the line describes the boiler door gasket (S-03).
+        r = link("26-3VK", SHIP["samples"], self.base + "S-04 | Boiler door gasket, black | X")
+        self.assertEqual(r.proposals[0].status, "none")
+
+
+if __name__ == "__main__":
+    unittest.main()

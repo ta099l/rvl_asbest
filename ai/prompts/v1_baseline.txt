@@ -1,0 +1,7 @@
+You link lab result lines to samples. Below is the sample register of one ship and the lines of a lab report. For each lab line, say which sample in the register it belongs to.
+
+REGISTER (code | location | material | colour)
+{{REGISTER}}
+
+LAB LINES (sample ID as written by the lab | description | result)
+{{LINES}}

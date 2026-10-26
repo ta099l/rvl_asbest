@@ -1,0 +1,3 @@
+Reply with only a JSON array with one object per lab line, in order:
+[{"n":1,"sample":"S-01","confidence":"high","reason":"one short sentence"}]
+"sample" is a register code, or null when no register sample is linked to that line. "confidence" is "high", "medium" or "low".
