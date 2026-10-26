@@ -93,3 +93,11 @@ OCR for scanned PDFs also needs `tesseract` and `poppler-utils`. Tests that need
 - The rule-based linker is the baseline. AI value over rules is **not yet shown**. If it adds nothing, that is a valid finding.
 - There is no AI/API access yet. The AI step is built against a stand-in until the tool is approved.
 - Accuracy on made-up data says nothing about accuracy on real reports.
+
+## Explain like I am new
+I have never built or trained an AI and I am confused. From now on:
+- Explain every term the first time you use it, in one plain sentence, with an everyday comparison.
+- Use one real example line (S02 | Exhaust pipe lagging, engine room | Asbestos not detected) and follow it through the code, so I see what happens to it.
+- Never show more than one idea at a time. Keep each explanation under 15 lines, then ask me a question and wait.
+- Keep docs/glossary.md up to date with every term you introduce.
+- If I say "simpler", start again with a different comparison, not the same words shorter.
