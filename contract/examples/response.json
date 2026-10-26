@@ -1,0 +1,7 @@
+{
+  "proposals": [
+    {"n": 1, "sample": "S-02", "confidence": "high", "reason": "ID S02 matches S-02 and the description matches the exhaust lagging."},
+    {"n": 2, "sample": "S-01", "confidence": "high", "reason": "ID matches S-01 exactly and the description matches the insulation wrap."},
+    {"n": 3, "sample": null, "confidence": null, "reason": "No ID and no register sample fits 'sealant, unknown location', so no link."}
+  ]
+}

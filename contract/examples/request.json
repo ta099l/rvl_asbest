@@ -1,0 +1,13 @@
+{
+  "report_id": "LAB-2026-0412",
+  "register": [
+    {"code": "S-01", "location": "Engine room, port bulkhead", "material": "Insulation wrap", "colour": "grey fibrous"},
+    {"code": "S-02", "location": "Engine room, main engine exhaust", "material": "Pipe lagging", "colour": "white"},
+    {"code": "S-03", "location": "Boiler room, boiler door", "material": "Gasket", "colour": "black"}
+  ],
+  "rows": [
+    {"n": 1, "raw_id": "S02", "description": "Exhaust pipe lagging, engine room", "result": "Asbestos not detected"},
+    {"n": 2, "raw_id": "S-01", "description": "Grey fibrous wrap, port bulkhead", "result": "Chrysotile 15%"},
+    {"n": 3, "raw_id": null, "description": "Sealant, unknown location", "result": "Chrysotile 3%"}
+  ]
+}

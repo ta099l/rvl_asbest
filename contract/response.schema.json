@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "james/contract/response.schema.json",
+  "title": "James linking response (AI part -> app)",
+  "description": "One proposal per request row, same order, same n. A proposal is only a proposal: an inspector approves, corrects or rejects it. Extra rules checked against the request: proposals.length equals rows.length, each n equals the row's n, and sample is a code from the request register (exact spelling).",
+  "type": "object",
+  "required": ["proposals"],
+  "additionalProperties": false,
+  "properties": {
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["n", "sample", "confidence", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "n": {"type": "integer", "minimum": 1},
+          "sample": {"type": ["string", "null"], "minLength": 1, "description": "A register code, or null for no link."},
+          "confidence": {"enum": ["high", "medium", "low", null], "description": "null only when sample is null."},
+          "reason": {"type": "string", "pattern": "\\S", "description": "One short sentence the inspector can check."}
+        },
+        "if": {"properties": {"sample": {"type": "null"}}},
+        "else": {"properties": {"confidence": {"enum": ["high", "medium", "low"]}}}
+      }
+    }
+  }
+}
