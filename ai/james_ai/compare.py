@@ -48,7 +48,7 @@ def compare_set(data: dict, set_name: str, client: ReplayClient, version: str = 
         a = propose(req, client, version, prompts_dir)
         got = {"rules": rules_response(req)["proposals"][0], "ai": a.response["proposals"][0],
                "hybrid": h.response["proposals"][0]}
-        cases.append({"id": c["id"], "tag": c["tag"], "truth": c["truth"],
+        cases.append({"id": c["id"], "tag": c["tag"], "line": c["line"], "truth": c["truth"],
                       "ai_answered": not (a.answer is None), "sent_to_ai": bool(h.sent),
                       **{v: {"sample": got[v]["sample"], "reason": got[v]["reason"],
                              "outcome": outcome(got[v]["sample"], c["truth"])} for v in VARIANTS}})
@@ -104,6 +104,8 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     ap.add_argument("--prompt", default=DEFAULT_PROMPT, help="prompt version in ai/prompts/")
     ap.add_argument("--export-prompts", type=Path, metavar="FILE",
                     help="write the prompts of this set to a replay file to fill in, then stop")
+    ap.add_argument("--save", action="store_true",
+                    help="also save a dev/dev2 run to ai/runs/ (hold-out runs are always saved)")
     args = ap.parse_args(argv)
 
     if args.export_prompts:
@@ -124,6 +126,8 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
         print(table(result))
         if not args.replay:
             print("\nNo replay file given: the AI column shows what happens when the AI gives no answer.")
+        if args.save:
+            print(f"\nSaved: {save_run(result, runs_dir)}")
     return 0
 
 

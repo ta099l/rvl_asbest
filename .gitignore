@@ -4,5 +4,4 @@ __pycache__/
 .env
 *.sqlite
 *.db
-ai/runs/
 .DS_Store

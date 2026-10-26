@@ -110,6 +110,8 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     data = load_cases(cases_file)
     ap = argparse.ArgumentParser(description="Score the rule-based linker on a test set.")
     ap.add_argument("--set", required=True, choices=sorted(data["sets"]), dest="set_name")
+    ap.add_argument("--save", action="store_true",
+                    help="also save a dev/dev2 run to ai/runs/ (hold-out runs are always saved)")
     args = ap.parse_args(argv)
 
     result = score_set(data, args.set_name)
@@ -120,6 +122,8 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
         print(f"\nSaved: {save_run(result, runs_dir)}")
     else:
         print(report(result))
+        if args.save:
+            print(f"\nSaved: {save_run(result, runs_dir)}")
     return 0
 
 

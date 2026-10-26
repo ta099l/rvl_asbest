@@ -1,0 +1,1 @@
+Baseline prompt from the starting kit: a plain task description, the register and the lab lines, no examples and no rules about uncertainty. On 2026-10-26 the shared answer format (`_output_format.txt`) was changed from a bare list to `{"proposals": [...]}` to match the contract; the wording of this prompt was not changed.

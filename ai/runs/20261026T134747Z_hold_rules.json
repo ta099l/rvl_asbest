@@ -1,0 +1,106 @@
+{
+  "set": "hold",
+  "register": "ship_s_codes",
+  "variant": "rules",
+  "lines": 9,
+  "counts": {
+    "correct": 6,
+    "wrong": 0,
+    "abstained_ok": 2,
+    "abstained_missed": 1
+  },
+  "cases": [
+    {
+      "id": "h1",
+      "tag": "synonym",
+      "line": "S-02 | Exhaust lagging, main engine | Asbestos not detected",
+      "truth": "S-02",
+      "proposed": "S-02",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "h2",
+      "tag": "separator",
+      "line": "S06 | Flange gasket, steering gear | Asbestos not detected",
+      "truth": "S-06",
+      "proposed": "S-06",
+      "confidence": "medium",
+      "reason": "ID \"S06\" normalised to S-06 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "h3",
+      "tag": "no zero",
+      "line": "S-5 | Green vinyl floor, cabin 214 | Chrysotile 2%",
+      "truth": "S-05",
+      "proposed": "S-05",
+      "confidence": "medium",
+      "reason": "ID \"S-5\" normalised to S-05 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "h4",
+      "tag": "ID conflict",
+      "line": "S-03 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "S-01",
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID says S-03 but the description matches S-01 (100%) and S-03 only 20%. Conflicting evidence, so no link is proposed.",
+      "outcome": "abstained_missed"
+    },
+    {
+      "id": "h5",
+      "tag": "no ID",
+      "line": "- | Ceiling board, accommodation deck 2 corridor | Asbestos not detected",
+      "truth": "S-04",
+      "proposed": "S-04",
+      "confidence": "low",
+      "reason": "No ID on this lab line. Matched on description only: S-04 (100%, next best 50%). Low confidence, inspector must confirm.",
+      "outcome": "correct"
+    },
+    {
+      "id": "h6",
+      "tag": "unknown ID",
+      "line": "S-11 | Paint sample, hold 3 | Asbestos not detected",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID \"S-11\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.",
+      "outcome": "abstained_ok"
+    },
+    {
+      "id": "h7",
+      "tag": "clean",
+      "line": "S-07 | Paint coating, red-brown, cargo hold 1 | Asbestos not detected",
+      "truth": "S-07",
+      "proposed": "S-07",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "h8",
+      "tag": "Dutch",
+      "line": "S-01 | Isolatiemateriaal, machinekamer schot bakboord | Chrysotile 15%",
+      "truth": "S-01",
+      "proposed": "S-01",
+      "confidence": "low",
+      "reason": "ID matches register exactly. Description only partly agrees (0%), please check.",
+      "outcome": "correct"
+    },
+    {
+      "id": "h9",
+      "tag": "too vague",
+      "line": "- | Hatch cover seal | Asbestos not detected",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "No ID on this lab line. No sample in the register fits the description well enough. No link proposed.",
+      "outcome": "abstained_ok"
+    }
+  ],
+  "run_at": "2026-10-26T13:47:47+00:00",
+  "commit": "613e357"
+}
