@@ -1,0 +1,309 @@
+{
+  "set": "dev",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 12,
+  "ai_answered": 0,
+  "sent_to_ai": 8,
+  "counts": {
+    "rules": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 2
+    },
+    "ai": {
+      "correct": 0,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 10
+    },
+    "hybrid": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "d1",
+      "tag": "clean",
+      "line": "S-01 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "S-01",
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "S-01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt a885d73d46e9b02d). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d2",
+      "tag": "separator",
+      "line": "S02 | Exhaust pipe lagging, engine room | Asbestos not detected",
+      "truth": "S-02",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-02",
+        "reason": "ID \"S02\" normalised to S-02 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 28cf7938dd19cc3d). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-02",
+        "reason": "ID \"S02\" normalised to S-02 (case, spaces, zero padding). Description agrees (100%). AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 28cf7938dd19cc3d).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d3",
+      "tag": "case",
+      "line": "s-03 | Boiler door gasket, black | Chrysotile 40%",
+      "truth": "S-03",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-03",
+        "reason": "ID \"s-03\" normalised to S-03 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt bdf1f23dc707c01c). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-03",
+        "reason": "ID \"s-03\" normalised to S-03 (case, spaces, zero padding). Description agrees (100%). AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt bdf1f23dc707c01c).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d4",
+      "tag": "spacing",
+      "line": "S 04 | Ceiling panel, corridor deck 2 | Asbestos not detected",
+      "truth": "S-04",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-04",
+        "reason": "ID \"S 04\" normalised to S-04 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 53ba8a20dca4b7b0). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-04",
+        "reason": "ID \"S 04\" normalised to S-04 (case, spaces, zero padding). Description agrees (100%). AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 53ba8a20dca4b7b0).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d5",
+      "tag": "ID conflict",
+      "line": "S-05 | Flange gasket, steering gear room | Asbestos not detected",
+      "truth": "S-06",
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID says S-05 but the description matches S-06 (100%) and S-05 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt c42499cbc1286aa5). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID says S-05 but the description matches S-06 (100%) and S-05 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_missed"
+      }
+    },
+    {
+      "id": "d6",
+      "tag": "unknown ID",
+      "line": "S-09 | Hatch coaming seal, hold 2 | Asbestos not detected",
+      "truth": null,
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"S-09\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses S codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 0657a5a3e70de552). No link proposed; link by hand.",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"S-09\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses S codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "d7",
+      "tag": "no ID",
+      "line": "- | Pump packing, pump room, grey-white woven | Asbestos not detected",
+      "truth": "S-08",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-08",
+        "reason": "No ID on this lab line. Matched on description only: S-08 (100%, next best 33%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 56f5021d509216cc). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-08",
+        "reason": "No ID on this lab line. Matched on description only: S-08 (100%, next best 33%). Low confidence, inspector must confirm. AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 56f5021d509216cc).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d8",
+      "tag": "clean",
+      "line": "S-07 | Bulkhead coating, cargo hold 1, red-brown | Asbestos not detected",
+      "truth": "S-07",
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "S-07",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 8adaebd22440d107). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-07",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d9",
+      "tag": "Dutch",
+      "line": "S-08 | Pompafdichting, pompruimte | Asbest niet aangetoond",
+      "truth": "S-08",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-08",
+        "reason": "ID matches register exactly. Description only partly agrees (0%), please check.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 636c58b4e24d20c9). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-08",
+        "reason": "ID matches register exactly. Description only partly agrees (0%), please check. AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 636c58b4e24d20c9).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d10",
+      "tag": "Dutch, typo",
+      "line": "S-0 4 | Plafondplaat, gang dek 2 | Asbest niet aangetoond",
+      "truth": "S-04",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"S-0 4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 7904238d67f125e7). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"S-0 4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 7904238d67f125e7).",
+        "outcome": "abstained_missed"
+      }
+    },
+    {
+      "id": "d11",
+      "tag": "too vague",
+      "line": "- | Gasket | Asbestos not detected",
+      "truth": null,
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": null,
+        "reason": "No ID on this lab line. Two or more samples fit the description equally (S-03 and S-06). No link proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt 35c4fc1b01d6174f). No link proposed; link by hand.",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "No ID on this lab line. Two or more samples fit the description equally (S-03 and S-06). No link proposed. AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt 35c4fc1b01d6174f).",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "d12",
+      "tag": "letter O",
+      "line": "S-O3 | Boiler door seal, black | Chrysotile 40%",
+      "truth": "S-03",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-03",
+        "reason": "ID \"S-O3\" is not in the sample register. Matched on description only: S-03 (75%, next best 0%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (NoRecordedAnswer: no recorded answer for prompt adfa0677ba5e1553). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-03",
+        "reason": "ID \"S-O3\" is not in the sample register. Matched on description only: S-03 (75%, next best 0%). Low confidence, inspector must confirm. AI not used: AI call failed (NoRecordedAnswer: no recorded answer for prompt adfa0677ba5e1553).",
+        "outcome": "correct"
+      }
+    }
+  ],
+  "replay": "ai/replays/dev_v1.json",
+  "run_at": "2026-10-26T15:53:06+00:00",
+  "commit": "713da6b"
+}

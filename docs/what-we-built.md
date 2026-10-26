@@ -16,3 +16,8 @@ Three lines per item: what it does, why it exists, one example.
 - **What:** a written proposal in `docs/decisions.md` for a `survey` table (project, site, dates, inspector) that samples and lab reports belong to, with the table changes and the effect on `store.py`, plus four open questions.
 - **Why:** one ship can be surveyed in Rotterdam and later in Antwerp; with one site on the object, the second survey overwrites where the first results came from.
 - **Example:** MV Demo Star, survey 1 at Quay 12 Demo Harbour in 2026 (S-01..S-08) and survey 2 at a shipyard in 2027: each result keeps the place and date of the survey it came from.
+
+## 4. Iteration log for Appendix A (`python3 -m ai.james_ai.iteration_log`)
+- **What:** rebuilds `docs/iteration-log.md` from every saved run in `ai/runs/` and every prompt in `ai/prompts/`: per prompt version the change note, the full prompt, a results table, and the wrong and missed cases with reasons. `score` and `compare` got `--save`, and `ai/runs/` is now kept in git.
+- **Why:** graders want visible, reproducible iteration; numbers typed by hand into a report can drift from what was really measured.
+- **Example:** the v1_baseline section shows dev2 hybrid 8 / 0 / 2 / 1 with AI answers 0/11 at commit 713da6b, and lists e3 as missed with "M12 and HM12 differ only by prefix".

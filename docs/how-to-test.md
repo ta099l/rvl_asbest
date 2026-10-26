@@ -108,3 +108,13 @@ If you change the prompt, make a new version (`ai/prompts/v2_....txt`), export a
 git log --oneline                # all saved steps
 git diff a72511c --stat          # everything changed since the original kit
 ```
+
+## 8. Iteration log (Appendix A)
+
+```
+python3 -m ai.james_ai.score --set dev --save
+python3 -m ai.james_ai.compare --set dev --replay ai/replays/dev_v1.json --save
+python3 -m ai.james_ai.iteration_log
+```
+
+The first two save a run to `ai/runs/` (now kept in git). The last one rebuilds `docs/iteration-log.md` from all saved runs and prompt versions. Check that its tables match what the commands printed. Hold-out runs appear with totals only.

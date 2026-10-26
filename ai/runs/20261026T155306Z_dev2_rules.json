@@ -1,0 +1,126 @@
+{
+  "set": "dev2",
+  "register": "ship_typed_codes",
+  "variant": "rules",
+  "lines": 11,
+  "counts": {
+    "correct": 8,
+    "wrong": 0,
+    "abstained_ok": 2,
+    "abstained_missed": 1
+  },
+  "cases": [
+    {
+      "id": "e1",
+      "tag": "clean",
+      "line": "M01 | Insulation wrap, engine room | Chrysotile 12%",
+      "truth": "M01",
+      "proposed": "M01",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e2",
+      "tag": "prefix",
+      "line": "HM12 | Red-brown paint, cargo hold 1 | Pb 640 mg/kg",
+      "truth": "HM12",
+      "proposed": "HM12",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e3",
+      "tag": "prefix conflict",
+      "line": "M12 | Red-brown paint, cargo hold 1, heavy metals | Pb 640 mg/kg",
+      "truth": "HM12",
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID says M12 but the description fits HM12 better (100% against 75%). M12 and HM12 differ only by prefix, which marks a different test, so no link is proposed. Ask the lab which test this is.",
+      "outcome": "abstained_missed"
+    },
+    {
+      "id": "e4",
+      "tag": "missing zero",
+      "line": "PBS1 | Cable sheath, corridor deck 2 | PCB 12 mg/kg",
+      "truth": "PBS01",
+      "proposed": "PBS01",
+      "confidence": "medium",
+      "reason": "ID \"PBS1\" normalised to PBS01 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e5",
+      "tag": "spacing",
+      "line": "PBS 03 | Cable, main switchboard engine room | PCB < 5 mg/kg",
+      "truth": "PBS03",
+      "proposed": "PBS03",
+      "confidence": "medium",
+      "reason": "ID \"PBS 03\" normalised to PBS03 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e6",
+      "tag": "clean",
+      "line": "KM01 | Dust, vent grille cabin 214 | Asbestos not detected",
+      "truth": "KM01",
+      "proposed": "KM01",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (80%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e7",
+      "tag": "unknown ID",
+      "line": "OS02 | Hydraulic oil, steering gear | PCB < 1 mg/kg",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID \"OS02\" is not in the sample register. The register uses OS codes, so this looks like a sample that was not registered. The description fits OS01 (100%), but the ID and the description disagree, so no link is proposed.",
+      "outcome": "abstained_ok"
+    },
+    {
+      "id": "e8",
+      "tag": "no ID",
+      "line": "- | Foam pipe insulation, pump room | ODS not detected",
+      "truth": "ODS01",
+      "proposed": "ODS01",
+      "confidence": "low",
+      "reason": "No ID on this lab line. Matched on description only: ODS01 (100%, next best 40%). Low confidence, inspector must confirm.",
+      "outcome": "correct"
+    },
+    {
+      "id": "e9",
+      "tag": "missing zero",
+      "line": "ODS1 | Insulation foam round pipes, pump room | CFC-11 detected",
+      "truth": "ODS01",
+      "proposed": "ODS01",
+      "confidence": "medium",
+      "reason": "ID \"ODS1\" normalised to ODS01 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e10",
+      "tag": "clean",
+      "line": "SS01 | Swipe sample, transformer casing | PCB 8 ug/100cm2",
+      "truth": "SS01",
+      "proposed": "SS01",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "e11",
+      "tag": "unknown ID",
+      "line": "M3 | Gasket, boiler door | Chrysotile 40%",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID \"M3\" is not in the sample register. The register uses M codes, so this looks like a sample that was not registered. The description fits M02 (100%), but the ID and the description disagree, so no link is proposed.",
+      "outcome": "abstained_ok"
+    }
+  ],
+  "run_at": "2026-10-26T15:53:06+00:00",
+  "commit": "713da6b"
+}
