@@ -15,7 +15,7 @@ The prompt now starts with `(.venv)`. Do this once per new terminal.
 python3 -m unittest discover -s tests -t .
 ```
 
-Expected: `Ran 88 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
+Expected: `Ran 103 tests ... OK (skipped=1)`. The one skip is the OCR test (needs `tesseract`, not installed). Any `FAIL` or `ERROR` means something broke: read the first lines of the message, they name the test and the line.
 
 One file at a time, with the name of each test (`-v`):
 
@@ -48,9 +48,9 @@ Expected now:
 | Set | correct | wrong | abstained_ok | abstained_missed |
 |---|---|---|---|---|
 | dev | 8 | 0 | 2 | 2 |
-| dev2 | 8 | 0 | 1 | 2 |
+| dev2 | 8 | 0 | 2 | 1 |
 
-(dev2 was 9 / 2 / 0 / 0 before Chunk 4.) Below the numbers you see each line that was not right, with the reason.
+(dev2 was 9 / 2 / 0 / 0 before Chunk 4, and 8 / 0 / 1 / 2 before e11 was set to no link.) Below the numbers you see each line that was not right, with the reason.
 
 **Do not run `--set hold` to check things.** It was run once for rules v1 (6 / 0 / 2 / 1, saved in `ai/runs/`). Run it again only for a final version.
 

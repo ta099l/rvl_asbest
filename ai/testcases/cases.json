@@ -347,7 +347,7 @@
       "set": "dev2",
       "tag": "unknown ID",
       "line": "M3 | Gasket, boiler door | Chrysotile 40%",
-      "truth": "M02"
+      "truth": null
     }
   ]
 }

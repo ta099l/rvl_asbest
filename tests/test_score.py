@@ -50,6 +50,24 @@ class ScoreSet(unittest.TestCase):
         self.assertEqual(set(data["sets"]), {"dev", "dev2", "hold"})
 
 
+class DevSetsStaySafe(unittest.TestCase):
+    """Regression guard on the real dev sets (never hold): the rules make no wrong links."""
+
+    def test_no_wrong_links_on_dev_and_dev2(self):
+        data = load_cases()
+        for name in ("dev", "dev2"):
+            self.assertEqual(score_set(data, name)["counts"]["wrong"], 0, name)
+
+    def test_unregistered_code_gets_no_link_even_if_the_description_matches(self):
+        # e11: M3 is not in the register, which uses M codes; the description fits M02.
+        data = load_cases()
+        e11 = next(c for c in data["cases"] if c["id"] == "e11")
+        self.assertIsNone(e11["truth"])
+        case = next(c for c in score_set(data, "dev2")["cases"] if c["id"] == "e11")
+        self.assertEqual((case["proposed"], case["outcome"]), (None, "abstained_ok"))
+        self.assertIn("not registered", case["reason"])
+
+
 class Command(unittest.TestCase):
     def run_main(self, argv):
         with tempfile.TemporaryDirectory() as d:

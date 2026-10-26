@@ -30,3 +30,11 @@ One entry per decision: date, what, why, who agreed.
 - **Also:** an unknown code of a prefix family the register uses (S-09 next to S-01..S-08) is now always flagged `unregistered`, so the AI never links it either.
 - **Status:** no recorded AI answers yet, so the AI and hybrid numbers are not yet meaningful. Fill `ai/replays/dev_v1.json` and `dev2_v1.json` from the prompt lab.
 - **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-10-26: An unregistered code gets no link, even if the description matches (e11 changed)
+
+- **What:** the reference answer of dev2 case e11 (`M3 | Gasket, boiler door`) is now `null` instead of `M02`. Rule: a lab code that reads as a proper code (prefix + number) of a prefix family the register uses, but is not in the register, gets no link, even when the description fits a registered sample.
+- **Why:** M3 next to M01 and M02 most likely is a sample nobody registered, not a typo for M02. Linking it would hang a result on the wrong sample (safety rule 2). e7 (`OS02`) already had this reference, so the two cases now agree. Supersedes the "Cost" note of the typed-codes entry above.
+- **Exception, on purpose:** codes from another numbering system (a lab's own `GS15`, `XY7`) and malformed codes (`S-O3`) can still be matched on the description, at low confidence, because they say nothing about our register.
+- **Effect:** dev2 rules 8 / 0 / 2 / 1 (correct / wrong / abstained_ok / abstained_missed), was 8 / 0 / 1 / 2.
+- **Agreed by:** Tasnim. Still worth confirming with Rolf for real reports.
