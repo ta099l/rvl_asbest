@@ -11,3 +11,8 @@ Three lines per item: what it does, why it exists, one example.
 - **What:** dev2 case e11 (`M3`) now has reference "no link", and tests pin that the rules give no link for it and no wrong links on dev and dev2.
 - **Why:** e11 and e7 had the same pattern but opposite reference answers; a code that is not in the register must not be hung on another sample just because the text fits.
 - **Example:** `M3 | Gasket, boiler door` gives no link with "The register uses M codes, so this looks like a sample that was not registered." The description hint M02 is shown to the inspector, not proposed.
+
+## 3. Proposal: survey location belongs to a survey (Chunk 7, for Ivan)
+- **What:** a written proposal in `docs/decisions.md` for a `survey` table (project, site, dates, inspector) that samples and lab reports belong to, with the table changes and the effect on `store.py`, plus four open questions.
+- **Why:** one ship can be surveyed in Rotterdam and later in Antwerp; with one site on the object, the second survey overwrites where the first results came from.
+- **Example:** MV Demo Star, survey 1 at Quay 12 Demo Harbour in 2026 (S-01..S-08) and survey 2 at a shipyard in 2027: each result keeps the place and date of the survey it came from.

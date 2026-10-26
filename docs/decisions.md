@@ -38,3 +38,62 @@ One entry per decision: date, what, why, who agreed.
 - **Exception, on purpose:** codes from another numbering system (a lab's own `GS15`, `XY7`) and malformed codes (`S-O3`) can still be matched on the description, at low confidence, because they say nothing about our register.
 - **Effect:** dev2 rules 8 / 0 / 2 / 1 (correct / wrong / abstained_ok / abstained_missed), was 8 / 0 / 1 / 2.
 - **Agreed by:** Tasnim. Still worth confirming with Rolf for real reports.
+
+## 2026-10-26: Survey location belongs to a survey, not to the object (PROPOSAL for Ivan)
+
+**Status:** proposed by Tasnim, waiting for Ivan. Nothing in `schema.sql` or `store.py` is changed until he agrees.
+
+### The problem
+Today `object.site` and `object.project` hold one port and one project per ship. But one ship can be surveyed in Rotterdam in 2026 and in Antwerp in 2027, under two RVL projects, with two sets of samples and lab reports. With one `site` on the object, the second survey overwrites where the first one happened, and the last link of the chain (`... -> object -> survey location`) points to the wrong place for old results.
+
+### The proposal
+A new table `survey`: one visit to one object, at one place, in one period, under one project. Samples and lab reports belong to a survey; the object only says *what* it is.
+
+```sql
+CREATE TABLE survey (
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    project     TEXT NOT NULL,            -- RVL project code (moves here from object)
+    site        TEXT NOT NULL,            -- port, shipyard, quay, road km (moves here from object)
+    started_on  TEXT NOT NULL,            -- ISO date of the first survey day
+    ended_on    TEXT,                     -- NULL while the survey is open
+    inspector   TEXT NOT NULL             -- lead inspector, by name
+);
+
+-- object: drop site and project
+CREATE TABLE object (
+    id    INTEGER PRIMARY KEY,
+    name  TEXT NOT NULL,
+    kind  TEXT NOT NULL,
+    ref   TEXT                            -- IMO number, object code
+);
+
+-- sample: belongs to a survey; a code is unique within its survey
+CREATE TABLE sample (
+    survey_id INTEGER NOT NULL REFERENCES survey(id),
+    code      TEXT NOT NULL,
+    source    TEXT, location TEXT NOT NULL, part TEXT, material TEXT, notes TEXT, photo TEXT,
+    PRIMARY KEY (survey_id, code)
+);
+
+-- lab_report: belongs to the survey whose samples it analyses
+--   object_id INTEGER NOT NULL REFERENCES object(id)   becomes
+--   survey_id INTEGER NOT NULL REFERENCES survey(id)
+```
+
+`lab_row`, `decision`, `asset_version` and `asset_entry` stay as they are; `asset_version.object_id` stays, because the asset file is the object's history over all surveys. The chain becomes `result -> lab_row -> sample -> survey -> object`, and the survey location is `survey.site` on `survey.started_on`.
+
+### What changes in `store.py` (for Ivan to decide how)
+- `add_object(name, kind, ref, site, project, samples)` splits into `add_object(name, kind, ref)` and `add_survey(object_id, project, site, started_on, inspector, samples)`.
+- `ingest_report` takes a `survey_id`; the project check in the report header compares with `survey.project`.
+- `register(...)` returns the samples of one survey; `draft_report` shows the survey's site and date.
+- Existing data: one survey per object, filled from the old `object.site` and `object.project`.
+
+### Questions for Ivan (and Rolf)
+1. **Do sample codes restart per survey?** If S-01 in Antwerp 2027 is a new sticker, the key must be `(survey_id, code)` as above, and the asset history cannot follow a sample by code alone across surveys. It would then follow the *place in the object* (source/location) instead. Is that how RVL compares results over time?
+2. Can one survey span two places (start in port, finish at the shipyard)? If yes, `site` needs its own small table.
+3. Is the RVL project always one survey, or can one project cover several visits?
+4. Who is the "inspector" of a survey: the lead only, or everyone who took samples?
+
+### Effect on the AI part (Tasnim)
+None on the contract: the app already sends one register per request, which will simply be the register of one survey.
