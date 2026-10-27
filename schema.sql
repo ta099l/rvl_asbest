@@ -10,7 +10,9 @@ CREATE TABLE object (
     kind      TEXT NOT NULL,            -- ship, civil structure, ...
     ref       TEXT,                     -- IMO number, object code
     site      TEXT NOT NULL,            -- port, shipyard, quay, road km
-    project   TEXT NOT NULL             -- RVL project code
+    project   TEXT NOT NULL,            -- RVL project code
+    survey_date TEXT,                   -- moves to a survey table if that proposal is accepted
+    info      TEXT                      -- JSON: the other Project Information fields of the IHM template
 );
 
 CREATE TABLE sample (
@@ -22,6 +24,12 @@ CREATE TABLE sample (
     material  TEXT,
     notes     TEXT,
     photo     TEXT,
+    drawing   TEXT,                     -- drawing reference and position, e.g. GA-01 pos 12
+    quantity  TEXT,                     -- estimated quantity of the source (IHM: Approximate Quantity)
+    unit      TEXT,                     -- kg, m2, m, pcs, l
+    deck      TEXT,                     -- deck level (own column in the IHM report)
+    status    TEXT NOT NULL DEFAULT 'sampled',  -- 'sampled' or 'not sampled' (inaccessible)
+    restriction TEXT,                   -- why it was not sampled: goes to the survey limitations
     PRIMARY KEY (object_id, code)
 );
 
@@ -33,7 +41,12 @@ CREATE TABLE lab_report (
     lab         TEXT,
     header_project TEXT,                -- project code as the lab wrote it
     raw_text    TEXT NOT NULL,          -- the extracted text, kept as received
-    ingested_at TEXT NOT NULL
+    ingested_at TEXT NOT NULL,
+    source_file TEXT,                   -- evidence: file name as received, or 'pasted text'
+    source_sha256 TEXT,                 -- evidence: fingerprint of the exact file or text
+    read_method TEXT,                   -- evidence: text layer, OCR, mixed, or pasted
+    linker_version TEXT,                -- evidence: fingerprint of the linker code that proposed
+    prompt_version TEXT                 -- evidence: prompt used by the AI step, if any
 );
 
 CREATE TABLE lab_row (
@@ -44,6 +57,10 @@ CREATE TABLE lab_row (
     raw_id      TEXT,
     description TEXT,
     result      TEXT,
+    certificate TEXT,                   -- lab certificate number, needed for the full chain
+    method      TEXT,                   -- analysis method, e.g. NEN 5896
+    quantity    TEXT,
+    remarks     TEXT,
     proposed_code TEXT,                 -- NULL = no link proposed
     confidence  TEXT,                   -- high / medium / low
     reason      TEXT NOT NULL,
@@ -81,4 +98,22 @@ CREATE TABLE asset_entry (              -- one approved result in one version
     approved_at TEXT NOT NULL,
     via         TEXT NOT NULL,          -- approved or corrected
     changed     INTEGER NOT NULL        -- 1 if it differs from the previous result
+);
+
+CREATE TABLE signoff (                  -- append-only: an inspector signs the report sections
+    id          INTEGER PRIMARY KEY,
+    report_id   INTEGER NOT NULL REFERENCES lab_report(id),
+    signed_by   TEXT NOT NULL,
+    signed_at   TEXT NOT NULL,
+    open_items  TEXT NOT NULL           -- JSON list, recorded as they were at signing
+);
+
+CREATE TABLE register_log (             -- append-only: every change to the field registration
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    code        TEXT NOT NULL,
+    action      TEXT NOT NULL,          -- added or changed
+    detail      TEXT NOT NULL,          -- what changed, old -> new
+    changed_by  TEXT NOT NULL,
+    changed_at  TEXT NOT NULL
 );

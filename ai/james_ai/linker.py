@@ -20,6 +20,12 @@ class Sample:
     material: str
     notes: str = ""
     photo: str = ""
+    deck: str = ""                   # deck level, its own column in the IHM report
+    status: str = "sampled"          # "sampled" or "not sampled" (inaccessible: a survey limitation)
+    restriction: str = ""            # why it was not sampled
+    drawing: str = ""                # drawing reference and position, e.g. "GA-01 pos 12"
+    quantity: str = ""               # estimated quantity of the source
+    unit: str = ""                   # kg, m2, m, pcs, l
 
     @property
     def text(self) -> str:
@@ -33,6 +39,7 @@ class LabRow:
     raw_id: str
     desc: str
     result: str
+    extra: Dict[str, str] = field(default_factory=dict)   # certificate, method, quantity, remarks
 
 
 @dataclass
@@ -119,25 +126,62 @@ def pct(x: float) -> str:
     return f"{round(x * 100)}%"
 
 
+# Column names a lab may use, mapped to one name. Real IHM lab tables have
+# SampleNumber | CertificateNumber | AnalysisMethod | AnalysisResult | Remarks | Quantity.
+COLUMN_NAMES = {
+    "id": "id", "sample": "id", "sampleid": "id", "samplenumber": "id", "sampleno": "id",
+    "description": "description", "materialuse": "description",
+    "method": "method", "analysis": "method", "analysismethod": "method", "analysisfor": "method",
+    "result": "result", "analysisresult": "result", "analysisresults": "result",
+    "certificate": "certificate", "certificatenumber": "certificate", "certificateno": "certificate",
+    "quantity": "quantity", "remarks": "remarks",
+}
+DEFAULT_COLUMNS = ["id", "description", "result"]
+
+
+def parse_columns(spec: str) -> List[str]:
+    """'Sample No. | CertificateNumber | Result' -> ['id', 'certificate', 'result'].
+
+    Unknown names are kept (lowercased) so nothing is silently dropped. Without
+    an id, description or result column the default order is used instead.
+    """
+    cols = [COLUMN_NAMES.get(re.sub(r"[^a-z]", "", c.lower()), c.strip().lower()) for c in spec.split("|")]
+    return cols if {"id", "result"} <= set(cols) else list(DEFAULT_COLUMNS)
+
+
 def parse_report(text: str):
-    """Header lines 'Key: value', then '---', then 'ID | description | result'."""
+    """Header lines 'Key: value', then '---', then 'ID | description | result'.
+
+    An optional header line 'Columns: id | description | method | result | certificate'
+    names the columns, so a lab table with extra columns keeps them apart. Without
+    it every line is read as ID | description | result, as before.
+    """
     head: Dict[str, str] = {}
     rows: List[LabRow] = []
     in_rows = False
+    cols = list(DEFAULT_COLUMNS)
     for ln in str(text).split("\n"):
         if not ln.strip():
             continue
         if ln.strip() == "---":
             in_rows = True
+            cols = parse_columns(head["columns"]) if "columns" in head else list(DEFAULT_COLUMNS)
             continue
         if not in_rows:
             if ":" in ln:
                 k, v = ln.split(":", 1)
                 head[k.strip().lower()] = v.strip()
-        else:
+        elif cols == DEFAULT_COLUMNS:
             p = [x.strip() for x in ln.split("|")]
             p += [""] * (3 - len(p))
             rows.append(LabRow(len(rows), ln, p[0], p[1], " | ".join(p[2:])))
+        else:
+            p = [x.strip() for x in ln.split("|")]
+            p += [""] * (len(cols) - len(p))
+            cells = dict(zip(cols, p[:len(cols) - 1] + [" | ".join(p[len(cols) - 1:])]))
+            extra = {k: v for k, v in cells.items() if k not in ("id", "description", "result")}
+            rows.append(LabRow(len(rows), ln, cells.get("id", ""), cells.get("description", ""),
+                               cells.get("result", ""), extra))
     return head, rows
 
 

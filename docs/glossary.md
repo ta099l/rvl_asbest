@@ -58,6 +58,32 @@ Every term used in this project, in one plain sentence with an everyday comparis
 | **Run record** | A saved result of one scoring run, with time and commit. | A dated lab measurement in a notebook. |
 | **Iteration log** | Generated overview of all prompt versions and their results (Appendix A). | A training diary. |
 
+## The IHM report (added 27 Oct 2026, app build)
+
+| Term | What it means | Like... |
+|---|---|---|
+| **Certificate number** | The number of the lab certificate a result comes from; the last link in the chain sample → result → certificate. | The receipt number that proves where a purchase came from. |
+| **Analysis method** | How the lab tested the sample, e.g. NEN 5896 for asbestos. | The recipe a cook followed. |
+| **Deck level** | Which deck of the ship a sample comes from; its own column in the IHM report. | The floor number in an office building. |
+| **Threshold** | The value above which a material must be listed in the IHM (for example lead 1000 mg/kg). In `app/thresholds.json`, still to confirm by RVL. | A speed limit: below it nothing happens, above it you get a ticket. |
+| **Table A / Table B** | The two IHM lists: A for banned materials (asbestos, PCB, ODS, ...), B for restricted ones (lead, cadmium, ...). | A list of forbidden items and a list of items you must declare at customs. |
+| **Part I lists (I-1, I-2, I-3)** | Where a hazardous material sits: I-1 paints and coatings, I-2 equipment and machinery, I-3 structure and hull. | Sorting a moving inventory into furniture, appliances and the house itself. |
+| **Survey limitation** | A place the inspector could not reach or sample, with the reason. | A "could not inspect: locked" note in a house survey. |
+| **PCHM** | Potentially Containing Hazardous Materials: a place that was not sampled is treated as possibly hazardous, never as clean. | Treating an unopened parcel as fragile because you cannot see inside. |
+| **Not sampled** | Register status for such a place. No lab result may ever be linked to it. | A guest on the list who sent apologies: nobody may sit in their chair. |
+| **Completeness check** | The flags for what is missing: a result, a photo, a certificate number. | A checklist before handing in a form. |
+| **Sign-off** | The inspector signs the report sections once every lab line is decided. After that, decisions are locked; open items are recorded with the signature. | Signing a delivery note: you note the dents, then sign. |
+| **Practice review (seeded errors)** | A copy of a report with deliberately wrong proposals, to measure whether the reviewer really checks (TC12, K10). | A fire drill: a fake alarm to see if people follow the procedure. |
+| **Automation bias** | People trusting a system so much that they stop checking it. | Following the sat-nav into a lake. |
+| **Processing time** | Minutes from reading a lab report to the last decision (K5). | A stopwatch on a pit stop. |
+| **Ambiguous number** | "1,400" is 1400 in English and 1.4 in Dutch; the app does not guess and hands it to the inspector. | A date like 03/04: March or April? |
+| **Source (bron)** | One place where a material is applied, e.g. "gasket at flange B03". A sample belongs to a source; a source has a quantity. | A room in a house; the sample is the paint chip you took from it. |
+| **Source Record** | The block per source in section 2.3 of the IHM report: description, sample, certificate, location, material, result, quantity, conclusion. | An index card per item in a museum. |
+| **Technical Responsible Person** | The person who signs the IHM report on behalf of James; in the template this is a separate role from the surveyor. | The head chef who checks every plate before it leaves the kitchen. |
+| **VSCP** | Visual/Sampling and Check Plan: the plan made before fieldwork of what to check and sample, where and how. | A packing list made before a trip. |
+| **Register log** | The append-only list of every change to the field registration, with name and time. | Track changes in a shared document. |
+| **SHA-256 fingerprint** | A code computed from the exact bytes of a file; one changed letter gives a completely different code. | A fingerprint: it proves which file it was, without storing the file again. |
+
 ## Tools
 
 | Term | What it means | Like... |

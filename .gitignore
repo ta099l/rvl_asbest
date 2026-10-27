@@ -5,3 +5,6 @@ __pycache__/
 *.sqlite
 *.db
 .DS_Store
+
+# Background documents for Claude, may hold client data: never commit
+context/

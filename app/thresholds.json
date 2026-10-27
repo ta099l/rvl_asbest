@@ -1,0 +1,98 @@
+{
+  "_status": "TO CONFIRM BY RVL. Values as the team reads MEPC.379(80), corrected where RVL's own IHM template says otherwise (lead 100 mg/kg, HBCDD in Table B). Nothing here is final until Rolf or Joris confirms it.",
+  "_at_threshold": "A value exactly on the threshold is listed, and flagged for the inspector to confirm (test case TC05).",
+  "substances": [
+    {
+      "key": "asbestos",
+      "name": "Asbestos",
+      "table": "A",
+      "threshold": 0.1,
+      "unit": "%",
+      "detected_counts": true
+    },
+    {
+      "key": "pcb",
+      "name": "Polychlorinated biphenyls (PCB)",
+      "table": "A",
+      "threshold": 50,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "ods",
+      "name": "Ozone-depleting substances (ODS)",
+      "table": "A",
+      "threshold": null,
+      "unit": "",
+      "detected_counts": true
+    },
+    {
+      "key": "tbt",
+      "name": "Organotin compounds (TBT)",
+      "table": "A",
+      "threshold": 2500,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "pfos",
+      "name": "PFOS",
+      "table": "?",
+      "threshold": 10,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "cd",
+      "name": "Cadmium",
+      "table": "B",
+      "threshold": 100,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "cr6",
+      "name": "Hexavalent chromium (Cr VI)",
+      "table": "B",
+      "threshold": 1000,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "pb",
+      "name": "Lead",
+      "table": "B",
+      "threshold": 100,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "hg",
+      "name": "Mercury",
+      "table": "B",
+      "threshold": 1000,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "hbcdd",
+      "name": "HBCDD",
+      "table": "B",
+      "threshold": 100,
+      "unit": "mg/kg",
+      "detected_counts": false
+    },
+    {
+      "key": "radio",
+      "name": "Radioactive substances",
+      "table": "B",
+      "threshold": null,
+      "unit": "",
+      "detected_counts": true
+    }
+  ],
+  "_conflicts": [
+    "Lead: the RVL IHM template says 'B3 Lead (100 mg/kg)'; the team read 1000 mg/kg in MEPC.379(80). The stricter 100 is used until RVL confirms.",
+    "PFOS: the RVL template has a section 2.3.4 PFOS but no PFOS line in Table A or B. Table left open ('?'): the inspector decides."
+  ]
+}

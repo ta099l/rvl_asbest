@@ -13,6 +13,7 @@ will differ, so treat the layout code as a starting point.
 """
 import glob
 import os
+import re
 import shutil
 import statistics
 import subprocess
@@ -29,6 +30,11 @@ class Word:
     x0: float
     top: float
     height: float
+    x1: float = 0.0          # right edge; 0 when unknown
+
+    @property
+    def right(self) -> float:
+        return self.x1 or self.x0 + len(self.text) * 0.5 * self.height
 
     @property
     def center(self) -> float:
@@ -60,17 +66,64 @@ def _group_lines(words: List[Word]) -> List[List[Word]]:
     return [sorted(ws, key=lambda w: w.x0) for _, _, ws in lines]
 
 
-def _find_columns(lines: List[List[Word]]) -> Optional[Tuple[int, float, float]]:
-    """Return (header line index, description x, result x) from the header row."""
+# Header words that start a column. Words in one header cell ("Certificate Number")
+# are joined first, so "analysisresult" and "analysismethod" stay two columns.
+HEADER_NAMES = {
+    "id": "id", "sample": "id", "sampleid": "id", "samplenumber": "id", "sampleno": "id",
+    "description": "description", "materialuse": "description",
+    "method": "method", "analysismethod": "method",
+    "result": "result", "results": "result", "analysisresult": "result", "analysisresults": "result",
+    "certificate": "certificate", "certificatenumber": "certificate", "certificateno": "certificate",
+    "quantity": "quantity", "remarks": "remarks",
+}
+Columns = List[Tuple[float, str]]          # (left edge x, column name), left to right
+
+
+def _header_cells(line: List[Word]) -> List[Tuple[float, str]]:
+    """Join words that sit close together into one header cell: [(x of first word, joined text)]."""
+    cells: List[list] = []                     # [x of first word, joined text, right edge]
+    for w in line:
+        if cells and w.x0 - cells[-1][2] < 0.6 * w.height:     # about one space apart: same cell
+            cells[-1][1] += w.text
+            cells[-1][2] = w.right
+        else:
+            cells.append([w.x0, w.text, w.right])
+    return [(x, re.sub(r"[^a-z]", "", t.lower())) for x, t, _ in cells]
+
+
+def _find_columns(lines: List[List[Word]]) -> Optional[Tuple[int, Columns]]:
+    """Return (header line index, columns) from the first line that has a description and a result header."""
     for i, ln in enumerate(lines):
-        low = {w.text.lower().strip(":"): w for w in ln}
-        if "description" in low and "result" in low:
-            return i, low["description"].x0 - 3, low["result"].x0 - 3
+        cols = [(x - 3, HEADER_NAMES[t]) for x, t in _header_cells(ln) if t in HEADER_NAMES]
+        names = [n for _, n in cols]
+        if "description" in names and "result" in names:
+            if names[0] != "id":                    # the first column holds the sample ID, named or not
+                cols.insert(0, (float("-inf"), "id"))
+            cols[0] = (float("-inf"), "id")
+            seen, out = set(), []
+            for x, n in cols:
+                if n not in seen:
+                    seen.add(n)
+                    out.append((x, n))
+            return i, out
     return None
 
 
-def words_to_lab_lines(words: List[Word], cols: Optional[Tuple[float, float]] = None):
-    """Return (header lines 'Key: value', table rows 'id | desc | result', columns)."""
+def _cells(line: List[Word], cols: Columns) -> List[str]:
+    edges = [x for x, _ in cols[1:]] + [float("inf")]
+    out = []
+    for k, (x, _) in enumerate(cols):
+        out.append(" ".join(w.text for w in line if (k == 0 or w.x0 >= x) and w.x0 < edges[k]))
+    return out
+
+
+def words_to_lab_lines(words: List[Word], cols: Optional[Columns] = None):
+    """Return (header lines 'Key: value', table rows 'id | desc | result', columns).
+
+    With only ID, description and result columns the rows look exactly as before.
+    With extra columns (certificate, method, quantity, remarks) a header line
+    'Columns: ...' names them, and every row keeps all its cells.
+    """
     lines = _group_lines(words)
     start = 0
     head: List[str] = []
@@ -78,21 +131,21 @@ def words_to_lab_lines(words: List[Word], cols: Optional[Tuple[float, float]] = 
         found = _find_columns(lines)
         if found is None:
             return [], [], None
-        hi, dx, rx = found
+        hi, cols = found
         for ln in lines[:hi]:
             t = " ".join(w.text for w in ln)
             if ":" in t:
                 head.append(t)
-        cols, start = (dx, rx), hi + 1
-    dx, rx = cols
+        if [n for _, n in cols] != ["id", "description", "result"]:
+            head.append("Columns: " + " | ".join(n for _, n in cols))
+        start = hi + 1
     rows: List[str] = []
     for ln in lines[start:]:
-        idc = " ".join(w.text for w in ln if w.x0 < dx)
-        dsc = " ".join(w.text for w in ln if dx <= w.x0 < rx)
-        res = " ".join(w.text for w in ln if w.x0 >= rx)
-        if not (idc or dsc or res):
+        cells = _cells(ln, cols)
+        if not any(cells):
             continue
-        rows.append(f"{idc or '-'} | {dsc} | {res}")
+        cells[0] = cells[0] or "-"
+        rows.append(" | ".join(cells))
     return head, rows, cols
 
 
@@ -112,7 +165,7 @@ def _ocr_words(pdf_path: str, page_number: int) -> List[Word]:
         f = ln.split("\t")
         if len(f) < 12 or f[0] != "5" or not f[11].strip():
             continue
-        words.append(Word(f[11].strip(), float(f[6]), float(f[7]), float(f[9])))
+        words.append(Word(f[11].strip(), float(f[6]), float(f[7]), float(f[9]), float(f[6]) + float(f[8])))
     return words
 
 
@@ -126,7 +179,7 @@ def extract_lab_text(pdf_path: str) -> Extraction:
         for page in pdf.pages:
             ws = page.extract_words()
             if len(ws) >= 5:
-                words = [Word(w["text"], w["x0"], w["top"], w["bottom"] - w["top"]) for w in ws]
+                words = [Word(w["text"], w["x0"], w["top"], w["bottom"] - w["top"], w["x1"]) for w in ws]
                 methods.append("text")
             else:
                 words = _ocr_words(pdf_path, page.page_number)
