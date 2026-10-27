@@ -1,32 +1,69 @@
-# Start here
+# James — lab agent prototype (RVL Asbest, minor DT&AI)
 
-This folder is a starting kit for working on the AI part of James with Claude Code in VS Code.
+A concept prototype for RVL's IHM surveys: register sources and samples, read a lab report, let the agent propose a link per result, let a named surveyor decide, and fill RVL's IHM template with the approved results. **All data is fictitious. No real AI runs yet** (a recorded stand-in answers).
 
-## Set up (about 15 minutes)
+The agent only proposes. A named person approves, corrects or rejects every link. Nothing is final without that.
 
-1. Unzip this folder somewhere simple, for example `Documents/james`.
-2. Open VS Code, choose **File > Open Folder**, and pick this folder.
-3. Install the **Claude Code** extension and sign in. (If your team shares one Claude login, read the shared-account rules on your plan page first, and keep one chat per task.)
-4. Open a terminal in VS Code and run:
+## Get started (Windows, about 15 minutes)
+
+1. Install **Python 3** (python.org, tick "Add python.exe to PATH") and **Git**.
+2. Get the code:
    ```
-   python3 -m venv .venv
-   source .venv/bin/activate        # Windows: .venv\Scripts\activate
+   git clone https://github.com/ta099l/rvl_asbest.git
+   cd rvl_asbest
+   git checkout ivan/app
+   ```
+3. Install the three packages:
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate
    pip install pdfplumber reportlab pillow
-   python3 -m unittest discover -s tests -t .
    ```
-   You should see `OK`. A few tests skip themselves if OCR tools are missing; that is fine.
-5. Open the Claude Code panel and paste the prompt for **Chunk 0** from `docs/CHUNKS.md`.
+4. Copy RVL's documents into a folder `context\` in the project (ask Ivan or Tasnim; they are shared through the team folder, **never through GitHub**). The app needs `context\IHM 26-.odt` for the Word download; everything else works without it.
+5. Start: double-click **`start_james.bat`**, or type `python app\server.py --db james.db`. The browser opens http://127.0.0.1:8000. Keep the black window open; close it (or press Ctrl+C) to stop.
 
-## What is in the folder
+## Use it
 
-| Path | What it is |
+- Type your name at the top: every action is signed with it.
+- **Demo:** MV Noorderlicht with lab report L-26-4471 is loaded. "Needs your attention" shows the two lines the agent is unsure about.
+- **Own (fictitious) project:** New project → register sources and samples → paste or upload a lab report → decide every line → sign as Technical Responsible Person → **Download IHM report (.odt)**, which opens in Word.
+- **Practice review:** a report with five hidden mistakes, to test whether the reviewer really checks (Harm's TC12).
+- Your projects are kept in `james.db` in the project folder (not in git). Delete it to start clean.
+
+Without installing anything, the flow can be seen in the demo artifact (ask Ivan for the link).
+
+## Who works where
+
+| Folder | Owner | Branch |
+|---|---|---|
+| `app/` — screen, server, report, Word export | Ivan | `ivan/app` |
+| `ai/` — linker rules, prompts, scoring, test cases | Tasnim | `tasnim/ai` |
+| `contract/` — what the app and the AI part send each other | Tasnim and Ivan together | change only when both agree |
+| `james/`, `schema.sql` — PDF reading and database | Ivan, ask Tasnim first | `ivan/app` |
+| `docs/` — decisions, context, questions for RVL, glossary | everyone | your own branch |
+| Test rounds (Appendix I, KPI sheet) | Harm | `harm/tests` |
+
+## Team rules
+
+1. **Work on your own branch.** Never commit to `main` or to someone else's branch.
+2. **Merge through a pull request** on GitHub, reviewed by one other team member.
+3. **Tests green before every push:**
+   ```
+   python -m unittest discover -s tests -t .
+   python -m unittest discover -s app -p "test_*.py" -t .
+   ```
+4. **Fictitious data only.** No real RVL reports, client names, ship names, IMO numbers or locations until Rolf and the coach approve it.
+5. **No secrets in the repo.** API keys come from environment variables, never from files that are committed.
+6. **RVL's documents stay out of git.** The folder `context/` is ignored on purpose.
+
+## Where to read more
+
+| File | What |
 |---|---|
-| `CLAUDE.md` | The standing brief Claude Code reads every session (rules, ownership, teaching mode) |
-| `docs/CHUNKS.md` | The ordered prompts, one chunk per session |
-| `ai/testcases/cases.json` | Registers and 32 test lines with reference answers (fictional) |
-| `ai/prompts/` | The baseline prompt and the fixed answer format |
-| `contract/` | Filled in during Chunk 2, shared with Ivan |
-| `app/` | Ivan's. Leave empty or put his code here, do not edit |
-| `james/`, `tests/`, `schema.sql`, `run_demo.py` | The backend starting point (made-up data, 32 passing tests) |
-
-Do not put real RVL reports anywhere in this folder until Rolf and your coach have approved a tool and said what may be shared.
+| `app/README.md` | the app in detail, and which test case each feature serves |
+| `docs/context.md` | what we know from RVL's documents (template, work process, onboarding, Lloyd's checklist) |
+| `docs/decisions.md` | every decision, why, and who agreed |
+| `docs/questions-rolf-joris.md` | open questions for RVL, each linked to the test it blocks |
+| `docs/what-we-built.md` | each piece in three lines: what, why, example |
+| `docs/glossary.md` | every term in one plain sentence |
+| `CLAUDE.md` | the standing brief for Claude Code sessions in this folder |

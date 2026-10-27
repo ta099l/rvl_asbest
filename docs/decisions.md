@@ -97,3 +97,37 @@ CREATE TABLE sample (
 
 ### Effect on the AI part (Tasnim)
 None on the contract: the app already sends one register per request, which will simply be the register of one survey.
+
+## 2026-10-27: Ivan builds across `ai/`, `james/` and `app/` today (permission from Tasnim)
+
+- **What:** Ivan said Tasnim gave him permission to build her part of the concept on 27 October. Changes outside `app/` were kept small and are listed below, so Tasnim can review and explain them. **Tasnim: please confirm or undo.**
+- **Not changed:** the linking rules, the hybrid pipeline, the prompts, the contract (`contract/`), and the scoring. Linking results on `dev`, `dev2` and `hold` are the same as before.
+- **Changed in `ai/james_ai/linker.py`:** `Sample` got three optional fields (`deck`, `status`, `restriction`); `LabRow` got `extra`; `parse_report` reads an optional header line `Columns: ...` so a lab table with certificate, method, quantity and remarks keeps them apart. Without that line every report is read exactly as before.
+- **Changed in `james/` and `schema.sql`:** the extractor recognises extra column headers and writes the `Columns:` line; `sample` has `deck`, `status`, `restriction`; `lab_row` has `certificate`, `method`, `quantity`, `remarks`; a new append-only `signoff` table. An older database file is upgraded in place. A register with a duplicate code is refused (TC04). A place with status `not sampled` is never offered to the linker and never counts as "missing result"; it is a survey limitation.
+- **Changed in `tests/`:** `test_import_answers.py` writes exact bytes, so the Windows line-ending test also passes on Windows. New `tests/test_lab_columns.py`.
+- **Agreed by:** Ivan (27 Oct). Tasnim: to confirm.
+
+## 2026-10-27: The app's report follows the layout of a real RVL IHM report
+
+- **What:** the draft sections are now Part I summary (I-1 paints, I-2 equipment, I-3 structure), 2.3 results per substance (sample table + lab table with certificate number and method), 3 survey limitations, 5.1 Table A and Table B, and a sign-off. This replaces "Ch. 9 / Ch. 10", which do not exist in the real report.
+- **Why:** the structure was taken from the headings and table columns of one real RVL IHM report (no content read, see `docs/context.md`). Harm's tests (K6, K7, TC05–TC08) measure against that layout.
+- **Proposals, not facts:** the Table A/B classification uses `app/thresholds.json`, marked "to confirm by RVL". The Part I list (I-1/I-2/I-3) is chosen from the part and material and is shown as a proposal. A value exactly on a threshold is listed and flagged. A number like "1,400" (thousands or decimals?) is never guessed.
+- **Sign-off:** only when every lab line is decided; open items are recorded with the signature; after signing, decisions are locked. A practice report can never be signed or saved to the history.
+- **Agreed by:** Ivan (owner of `app/`). Thresholds and the report layout: Rolf or Joris to confirm.
+
+## 2026-10-27 (afternoon): Project and field registration, evidence per report, report on the RVL template
+
+- **What:** the app now starts where RVL's process starts: **create a project** (the Project Information fields of the RVL IHM template) and **register sources and samples** (code, source, deck, location, part, material, colour, photo, drawing position, quantity, unit, status, reason). The code of a registered sample never changes; every addition and change is logged with name and time (`register_log`, append-only). A sample that already has a linked result cannot become "not sampled".
+- **Evidence per report:** source file name, SHA-256 fingerprint, how it was read (PDF text layer, OCR, pasted), a fingerprint of the linker code and the prompt version used by the AI step. When the field registration changes after a report was read, the report says it is out of date until "Let the agent read again".
+- **Report layout:** follows RVL's empty IHM template (`docs/context.md`): Project Information, Part I lists with their own columns, 2.3.1–2.3.7 with a Source Record per source, 3 limitations, Table 15 (A) and Table 16 (B) with the template's fixed lines. Quantities per line are added up from the field registration only when every source has a number in the same unit; otherwise the inspector fills them in. Signing is done as Technical Responsible Person and sets Report Status to Final.
+- **Thresholds changed to follow the template:** lead 100 mg/kg (was 1000), HBCDD in Table B, PFOS without a table ("?", inspector decides). Still to confirm by RVL.
+- **Not changed:** the contract, the linking rules, the AI step. The survey location and date stay on the object for now; the survey-table proposal is still open.
+- **Agreed by:** Ivan (27 Oct). Tasnim: the changes in `ai/james_ai/linker.py` are only extra optional fields on `Sample`.
+
+## 2026-10-27 (late afternoon): Export into RVL's IHM template
+
+- **What:** "Download IHM report (.odt)" fills RVL's own IHM template with the approved lines of one lab report: Project Information, Part I lists (a row per item), 2.3.1–2.3.7 (sample table, a Source Record per source, lab table, photo references), survey limitations, and the fixed lines of Table 15/16 with quantity and unit. Every placeholder is filled; what the app does not know becomes "–". An unsigned report says Draft; a practice report cannot be exported.
+- **Why:** RVL delivers a document in its own template. Copying tables by hand was the biggest gap for a surveyor.
+- **The template is not in the repository.** It is RVL's property (onboarding: templates only with permission). The app reads it from `context/IHM 26-.odt` or from the path in the environment variable `JAMES_IHM_TEMPLATE`. The tests use a small home-made template with the same patterns, plus one test on the real template when it is present.
+- **Not filled by the app:** consultation (2.2), desk research, the VSCP (appendix E) and the photos themselves. Those stay for the surveyor.
+- **Agreed by:** Ivan (27 Oct).

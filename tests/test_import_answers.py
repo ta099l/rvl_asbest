@@ -49,7 +49,7 @@ class ReadItems(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, d)
         p = d / f"answers{suffix}"
-        p.write_text(text)
+        p.write_bytes(text.encode("utf-8"))      # exact bytes: write_text would turn \n into \r\n on Windows
         return p
 
     def test_text_format_with_windows_line_endings(self):
