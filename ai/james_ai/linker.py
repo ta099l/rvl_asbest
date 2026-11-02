@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 STOP = {"the", "of", "at", "on", "in", "and", "a", "an", "with", "near", "side", "to", "for"}
+# Prefixes that end in a digit (chromium-6). Without a separator, 'CR601' would
+# otherwise read as prefix 'CR' + number 601 instead of 'CR6' + 1.
+DIGIT_PREFIXES = ("CR6", "CH6")
 
 
 @dataclass
@@ -91,6 +94,9 @@ def code_parts(s: str) -> Optional[Tuple[str, str]]:
     parts = [p for p in re.split(r"[^A-Z0-9]+", t) if p]
     if len(parts) >= 2 and parts[-1].isdigit():
         return "".join(parts[:-1]), parts[-1].lstrip("0") or "0"
+    for p in DIGIT_PREFIXES:
+        if t.startswith(p) and t[len(p):].isdigit():
+            return p, t[len(p):].lstrip("0") or "0"
     m = re.match(r"^([A-Z]+)([0-9]+)$", t)
     if m:
         return m.group(1), m.group(2).lstrip("0") or "0"

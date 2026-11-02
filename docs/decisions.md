@@ -131,3 +131,11 @@ None on the contract: the app already sends one register per request, which will
 - **The template is not in the repository.** It is RVL's property (onboarding: templates only with permission). The app reads it from `context/IHM 26-.odt` or from the path in the environment variable `JAMES_IHM_TEMPLATE`. The tests use a small home-made template with the same patterns, plus one test on the real template when it is present.
 - **Not filled by the app:** consultation (2.2), desk research, the VSCP (appendix E) and the photos themselves. Those stay for the surveyor.
 - **Agreed by:** Ivan (27 Oct).
+
+## 2026-11-02: Chromium-6 codes keep the 6 in their prefix
+
+- **What:** `code_parts` in `ai/james_ai/linker.py` checks a short list of prefixes that end in a digit (`CR6`, `CH6`) before the general "letters, then digits" rule. `CR601`, `CR6-01` and `CR6 01` now all read as prefix `CR6`, number 1. `CR601` and `CH601` stay different codes.
+- **Why:** the IHM template writes chromium-6 codes as `CR600`, without a separator. The old rule read `CR601` as prefix `CR` + number 601, so a register entry `CR6-01` and a lab line `CR601` were seen as two different codes: a missed link, not a wrong one. Found while checking the sample code list for Rolf.
+- **Effect:** `dev` and `dev2` scores unchanged (no test case uses a code without a separator yet). 130 tests pass. Reports read before this change show "older than the current linker" in the app until read again.
+- **Still open:** which notation RVL really uses (`CR600` or `CH6-nn`, `MM00` or `M00`): question 1 for Rolf. Test cases with `CR6` and `TBT` codes follow after his answer.
+- **Agreed by:** Tasnim (owner of `ai/`).

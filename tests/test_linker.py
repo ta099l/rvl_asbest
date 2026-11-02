@@ -140,6 +140,13 @@ class TypedCodes(unittest.TestCase):
         self.assertEqual(code_parts("CH6-05"), ("CH6", "5"))
         self.assertIsNone(code_parts("S-O3"))               # letter O, not a number
 
+    def test_chromium_6_prefix_keeps_its_digit(self):
+        for raw in ("CR601", "CR6-01", "CR6 01", "cr6-1"):
+            self.assertEqual(code_parts(raw), ("CR6", "1"), raw)
+        self.assertEqual(code_parts("CR610"), ("CR6", "10"))
+        self.assertEqual(id_key("CH601"), id_key("CH6-01"))
+        self.assertNotEqual(id_key("CR601"), id_key("CH601"))
+
     def test_prefix_is_part_of_the_code(self):
         self.assertNotEqual(id_key("M12"), id_key("HM12"))
         self.assertEqual(id_key("PBS1"), id_key("PBS01"))
