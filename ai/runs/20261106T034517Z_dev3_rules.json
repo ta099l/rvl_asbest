@@ -1,0 +1,116 @@
+{
+  "set": "dev3",
+  "register": "ship_standard_codes",
+  "variant": "rules",
+  "lines": 10,
+  "counts": {
+    "correct": 8,
+    "wrong": 0,
+    "abstained_ok": 2,
+    "abstained_missed": 0
+  },
+  "cases": [
+    {
+      "id": "f1",
+      "tag": "clean",
+      "line": "MM-1 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "MM-1",
+      "proposed": "MM-1",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f2",
+      "tag": "no separator",
+      "line": "CR601 | Primer, hatch coaming cargo hold 2 | Cr(VI) 120 mg/kg",
+      "truth": "CR6-1",
+      "proposed": "CR6-1",
+      "confidence": "medium",
+      "reason": "ID \"CR601\" normalised to CR6-1 (case, spaces, zero padding). Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f3",
+      "tag": "old notation",
+      "line": "CH6-02 | Primer, hatch cover cargo hold 2 | Cr(VI) < 10 mg/kg",
+      "truth": "CR6-2",
+      "proposed": "CR6-2",
+      "confidence": "medium",
+      "reason": "ID \"CH6-02\" uses CH6, an older notation for CR6: read as CR6-2. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f4",
+      "tag": "old notation",
+      "line": "M2 | Gasket, boiler door | Chrysotile 40%",
+      "truth": "MM-2",
+      "proposed": "MM-2",
+      "confidence": "medium",
+      "reason": "ID \"M2\" uses M, an older notation for MM: read as MM-2. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f5",
+      "tag": "clean",
+      "line": "TBT-1 | Antifouling paint, hull below waterline | TBT 3200 mg/kg",
+      "truth": "TBT-1",
+      "proposed": "TBT-1",
+      "confidence": "high",
+      "reason": "ID matches register exactly. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f6",
+      "tag": "old notation",
+      "line": "Pac-01 | Bituminous deck covering, deck 1 | PAH 85 mg/kg",
+      "truth": "PAH-1",
+      "proposed": "PAH-1",
+      "confidence": "medium",
+      "reason": "ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (100%).",
+      "outcome": "correct"
+    },
+    {
+      "id": "f7",
+      "tag": "unknown ID",
+      "line": "TBT-2 | Antifouling paint, rudder | TBT 1500 mg/kg",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID \"TBT-2\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses TBT codes, so this looks like a sample that was not registered.",
+      "outcome": "abstained_ok"
+    },
+    {
+      "id": "f8",
+      "tag": "prefix conflict",
+      "line": "CR6-1 | Railing paint, accommodation outside | Cr(VI) 40 mg/kg",
+      "truth": null,
+      "proposed": null,
+      "confidence": null,
+      "reason": "ID says CR6-1 but the description matches HM-1 (100%) and CR6-1 only 0%. Conflicting evidence, so no link is proposed.",
+      "outcome": "abstained_ok"
+    },
+    {
+      "id": "f9",
+      "tag": "lab's own code",
+      "line": "NL-2291 | Cable sheath, main switchboard engine room | PCB 30 mg/kg",
+      "truth": "PBS-1",
+      "proposed": "PBS-1",
+      "confidence": "low",
+      "reason": "ID \"NL-2291\" is not in the sample register. Matched on description only: PBS-1 (100%, next best 33%). Low confidence, inspector must confirm.",
+      "outcome": "correct"
+    },
+    {
+      "id": "f10",
+      "tag": "no ID",
+      "line": "- | Dust, ventilation grille cabin 214 | Asbestos not detected",
+      "truth": "KM-1",
+      "proposed": "KM-1",
+      "confidence": "low",
+      "reason": "No ID on this lab line. Matched on description only: KM-1 (100%, next best 0%). Low confidence, inspector must confirm.",
+      "outcome": "correct"
+    }
+  ],
+  "run_at": "2026-11-06T03:45:17+00:00",
+  "commit": "fbd2189+changes"
+}

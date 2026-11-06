@@ -113,7 +113,7 @@ class Guard(unittest.TestCase):
 class Compare(unittest.TestCase):
     def test_without_answers_rules_and_hybrid_match_the_rules_score(self):
         data = load_cases()
-        for name in ("dev", "dev2"):
+        for name in ("dev", "dev2", "dev3"):
             r = compare_set(data, name, ReplayClient())
             self.assertEqual(r["counts"]["rules"], score_set(data, name)["counts"])
             self.assertEqual(r["counts"]["hybrid"], r["counts"]["rules"])

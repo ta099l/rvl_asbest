@@ -19,7 +19,7 @@ For each pair:
   and whitespace at the very ends are ignored) and the answer is filled in;
 - an answer that is already there is never overwritten silently: a different
   one is reported as a conflict and kept, unless --replace is given;
-- a prompt that matches no replay entry is matched to a dev/dev2 test case.
+- a prompt that matches no replay entry is matched to a dev, dev2 or dev3 test case.
   If its wording is a new prompt version, the template is written to
   ai/prompts/vN_imported.txt (with a note to fill in) and the answer goes to
   ai/replays/<set>_<version>.json. A new version is only written if rebuilding
@@ -42,7 +42,7 @@ from .score import CASES_FILE, ROOT, load_cases
 
 REPLAYS_DIR = ROOT / "ai" / "replays"
 EXAMPLE_REQUEST = ROOT / "contract" / "examples" / "request.json"
-MATCH_SETS = ("dev", "dev2")
+MATCH_SETS = ("dev", "dev2", "dev3")
 
 
 @dataclass
@@ -108,7 +108,7 @@ def _save(path: Path, data: dict) -> None:
 
 
 def _known_requests(data: dict, example: Optional[Path]) -> List[Tuple[str, str, dict]]:
-    """(set, case ids, request) for every dev/dev2 case, plus the contract example."""
+    """(set, case ids, request) for every dev, dev2 or dev3 case, plus the contract example."""
     out = [(s, c["id"], req) for s in MATCH_SETS if s in data["sets"] for c, req in set_requests(data, s)]
     if example is not None and example.exists():
         req = json.loads(example.read_text(encoding="utf-8"))
@@ -183,7 +183,7 @@ def import_answers(items: List[Tuple[str, Any]], replace: bool = False,
                 found.append((set_name, ids, req, tpl))
         if len(found) != 1:
             first = prompt.strip().split("\n")[0][:60]
-            why = "matches no replay entry and no dev/dev2 test case" if not found else \
+            why = "matches no replay entry and no dev, dev2 or dev3 test case" if not found else \
                   f"matches {len(found)} test cases, cannot tell which"
             results.append(Result("mismatch", i, f"prompt starting '{first}' {why}; nothing written"))
             continue

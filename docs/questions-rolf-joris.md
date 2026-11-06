@@ -18,3 +18,20 @@ Each question blocks a test case or a KPI. Write the answer and the date next to
 | 12 | Which fields does the inspector fill in per source and sample during fieldwork, and how are drawing positions recorded? | Success criterion 1 starts at field registration; the app does not have it yet. | Field registration screen, K7 |
 | 13 | Is the Technical Responsible Person always someone else than the surveyor? Must the app enforce that? | The template has both roles; the app now signs as Technical Responsible Person but does not check it is a different person. | Sign-off, K10 |
 | 14 | Should a source with only a visual assessment (V00, marking, document) be registered without a lab sample? | The template has assessment methods besides lab analysis; the app now treats every registered sample as sampled or not sampled. | TC08, K6 |
+
+## Answers from Rolf (6 November 2026)
+
+| # | Answer | What we did with it |
+|---|---|---|
+| 1 | Standard = the English abbreviations of the IHM report: MM, KM, PBS, SS, OS, ODS, PFOS, HBCDD, HM, CR6, PAH, TBT, PFAS, NORM, TPH, VOC, plus VI (visual inspection), DR (document review), EI (equipment identification). Written with a dash and without leading zeros: `MM-1`, `CR6-1`, `HM-1`. Older codes such as `CH6-01`, `ZM-01` and `Pac-01` must stay recognisable. The original sample code on the lab certificate is always kept. | Alias table in the linker (CH6 → CR6, PAC → PAH, M → MM), new test set `dev3` in the standard notation. See `docs/decisions.md`, 6 Nov 2026. |
+| 6 | Not at this stage: each laboratory has its own classification system and analytical methods. | Ambiguous numbers keep going to the inspector; no per-lab reading. |
+| 9 | About 4 to 8 hours of reporting work per project once the results are in; longer for large IHM surveys. | Baseline for K5: 50% faster means 2 to 4 hours. |
+| – | Reporting software: Microsoft Word. | The export is .odt, which Word opens. Check with Ivan whether .docx is needed. |
+| – | Volume: hard to predict; assume 10 to 25 reports per month. James should later also cover asbestos surveys, chromium-6 assessments and other hazardous substances. | Input for the monthly cost estimate (multi-criteria analysis). |
+
+Still open: 2, 3, 4, 5, 7, 8, 10 (which AI tool), 11–14, and:
+
+| # | Question | Why we ask | Blocks |
+|---|---|---|---|
+| 15 | Which substance does the older code `ZM` stand for? | It must stay recognisable, but we cannot map it without knowing what it means. | Alias table |
+| 16 | Do VI, DR and EI codes ever appear on a lab certificate, or only in the field registration? | They are assessment methods without a lab analysis. | Linker, TC08 |

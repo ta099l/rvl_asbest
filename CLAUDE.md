@@ -65,10 +65,10 @@ One proposal per row, same order, same `n`. Schemas and examples live in `contra
 
 ## Test data and scoring
 
-- `ai/testcases/cases.json`: registers, and 32 lab lines in three sets: `dev` (12, S-codes), `dev2` (11, typed codes like M01, HM12, PBS03), `hold` (9, **hold-out: use once per final version, never tune on it**).
+- `ai/testcases/cases.json`: registers, and 42 lab lines in four sets: `dev` (12, S-codes), `dev2` (11, typed codes like M01, HM12, PBS03), `dev3` (10, RVL standard notation like MM-1, CR6-1, with older notations), `hold` (9, **hold-out: use once per final version, never tune on it**).
 - Every case has an inspector-style reference answer (`truth`, `null` means no link exists).
 - Four outcomes: **correct**, **wrong**, **abstained_ok** (no link, and none existed), **abstained_missed** (no link, but one existed). Wrong links count most.
-- Real RVL code families: `M` asbestos bulk, `KM` asbestos dust, `PBS` PCB bulk, `SS` PCB swipe, `OS` PCB oil, `ODS`, `PFOS`, `HBCDD`, `HM` heavy metals, `V` visual; chromium-6 uses `CH6-nn`. Two codes that differ only by prefix (for example `M12` and `HM12`) are a real conflict risk.
+- RVL standard codes (Rolf, 6 Nov 2026): `MM` asbestos bulk, `KM` asbestos dust, `PBS` PCB bulk, `SS` PCB swipe, `OS` PCB oil, `ODS`, `PFOS`, `HBCDD`, `HM` heavy metals, `CR6` chromium-6, `PAH`, `TBT`, `PFAS`, `NORM`, `TPH`, `VOC`, `VI` visual inspection, `DR` document review, `EI` equipment identification; written `MM-1` (dash, no leading zeros). Older notations stay recognisable through the alias table (`CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`); `ZM` is unknown. The lab's original code is always kept. Two codes that differ only by prefix (for example `MM-12` and `HM-12`) are a real conflict risk.
 
 ## Commands
 

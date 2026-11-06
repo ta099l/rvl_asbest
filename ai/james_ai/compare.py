@@ -105,7 +105,7 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     ap.add_argument("--export-prompts", type=Path, metavar="FILE",
                     help="write the prompts of this set to a replay file to fill in, then stop")
     ap.add_argument("--save", action="store_true",
-                    help="also save a dev/dev2 run to ai/runs/ (hold-out runs are always saved)")
+                    help="also save a dev run to ai/runs/ (hold-out runs are always saved)")
     args = ap.parse_args(argv)
 
     if args.export_prompts:

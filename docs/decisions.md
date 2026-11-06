@@ -139,3 +139,12 @@ None on the contract: the app already sends one register per request, which will
 - **Effect:** `dev` and `dev2` scores unchanged (no test case uses a code without a separator yet). 130 tests pass. Reports read before this change show "older than the current linker" in the app until read again.
 - **Still open:** which notation RVL really uses (`CR600` or `CH6-nn`, `MM00` or `M00`): question 1 for Rolf. Test cases with `CR6` and `TBT` codes follow after his answer.
 - **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-11-06: RVL's standard sample codes, with an alias table for older notations
+
+- **What:** James uses the IHM abbreviations as standard prefixes, written like `MM-1` and `CR6-1` (Rolf, 6 Nov 2026). The linker already treats `MM-1`, `MM01` and `MM1` as one code. New: an alias table in `ai/james_ai/linker.py` maps older notations to the standard prefix: `CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`. A link found only through an alias gets at most **medium** confidence, and the reason names the older notation ("CH6 is an older notation for CR6"). The rule that an unregistered code is never guessed also reads aliases, so `M3` next to `MM-1`, `MM-2` gets no link.
+- **Why:** Rolf asked that existing codes stay recognisable. Without the alias table `CH6-01` and `CR6-1` were seen as different codes: a missed link that costs the inspector time. Medium, not high, because a different notation is weaker evidence than an exact code.
+- **Not mapped:** `ZM` (meaning unknown, question 15). Aliases never join different tests: `M` (asbestos) never becomes `HM` (heavy metals).
+- **Supersedes:** the 2 Nov test that `CR601` and `CH601` are different keys still holds for `id_key`; the alias match is a separate, weaker step.
+- **New test set `dev3`:** 10 lines on a register in the standard notation (no separator, old notation, unregistered TBT-2, a CR6/HM prefix conflict, a lab's own code, no ID). Reference answers were written before running the rules. Rules: 8 correct, 0 wrong, 2 abstained OK, 0 missed. `dev` and `dev2` unchanged.
+- **Agreed by:** Tasnim (owner of `ai/`). Code standard: Rolf.

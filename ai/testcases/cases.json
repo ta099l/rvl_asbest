@@ -111,6 +111,62 @@
         "material": "Swipe sample, transformer casing",
         "colour": "-"
       }
+    ],
+    "ship_standard_codes": [
+      {
+        "code": "MM-1",
+        "location": "Engine room, port bulkhead",
+        "material": "Insulation wrap",
+        "colour": "grey fibrous"
+      },
+      {
+        "code": "MM-2",
+        "location": "Boiler room, boiler door",
+        "material": "Gasket",
+        "colour": "black"
+      },
+      {
+        "code": "KM-1",
+        "location": "Accommodation deck 2, cabin 214",
+        "material": "Dust on ventilation grille",
+        "colour": "grey dust"
+      },
+      {
+        "code": "CR6-1",
+        "location": "Cargo hold 2, hatch coaming",
+        "material": "Primer layer",
+        "colour": "yellow"
+      },
+      {
+        "code": "CR6-2",
+        "location": "Cargo hold 2, hatch cover",
+        "material": "Primer layer",
+        "colour": "yellow-green"
+      },
+      {
+        "code": "HM-1",
+        "location": "Accommodation, outside railing",
+        "material": "Railing paint",
+        "colour": "red"
+      },
+      {
+        "code": "TBT-1",
+        "location": "Hull, below waterline",
+        "material": "Antifouling paint",
+        "colour": "dark red"
+      },
+      {
+        "code": "PAH-1",
+        "location": "Deck 1, walkway",
+        "material": "Bituminous deck covering",
+        "colour": "black"
+      },
+      {
+        "code": "PBS-1",
+        "location": "Engine room, main switchboard",
+        "material": "Cable sheath",
+        "colour": "black"
+      }
     ]
   },
   "sets": {
@@ -122,6 +178,9 @@
     },
     "dev2": {
       "register": "ship_typed_codes"
+    },
+    "dev3": {
+      "register": "ship_standard_codes"
     }
   },
   "cases": [
@@ -348,6 +407,76 @@
       "tag": "unknown ID",
       "line": "M3 | Gasket, boiler door | Chrysotile 40%",
       "truth": null
+    },
+    {
+      "id": "f1",
+      "set": "dev3",
+      "tag": "clean",
+      "line": "MM-1 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "MM-1"
+    },
+    {
+      "id": "f2",
+      "set": "dev3",
+      "tag": "no separator",
+      "line": "CR601 | Primer, hatch coaming cargo hold 2 | Cr(VI) 120 mg/kg",
+      "truth": "CR6-1"
+    },
+    {
+      "id": "f3",
+      "set": "dev3",
+      "tag": "old notation",
+      "line": "CH6-02 | Primer, hatch cover cargo hold 2 | Cr(VI) < 10 mg/kg",
+      "truth": "CR6-2"
+    },
+    {
+      "id": "f4",
+      "set": "dev3",
+      "tag": "old notation",
+      "line": "M2 | Gasket, boiler door | Chrysotile 40%",
+      "truth": "MM-2"
+    },
+    {
+      "id": "f5",
+      "set": "dev3",
+      "tag": "clean",
+      "line": "TBT-1 | Antifouling paint, hull below waterline | TBT 3200 mg/kg",
+      "truth": "TBT-1"
+    },
+    {
+      "id": "f6",
+      "set": "dev3",
+      "tag": "old notation",
+      "line": "Pac-01 | Bituminous deck covering, deck 1 | PAH 85 mg/kg",
+      "truth": "PAH-1"
+    },
+    {
+      "id": "f7",
+      "set": "dev3",
+      "tag": "unknown ID",
+      "line": "TBT-2 | Antifouling paint, rudder | TBT 1500 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "f8",
+      "set": "dev3",
+      "tag": "prefix conflict",
+      "line": "CR6-1 | Railing paint, accommodation outside | Cr(VI) 40 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "f9",
+      "set": "dev3",
+      "tag": "lab's own code",
+      "line": "NL-2291 | Cable sheath, main switchboard engine room | PCB 30 mg/kg",
+      "truth": "PBS-1"
+    },
+    {
+      "id": "f10",
+      "set": "dev3",
+      "tag": "no ID",
+      "line": "- | Dust, ventilation grille cabin 214 | Asbestos not detected",
+      "truth": "KM-1"
     }
   ]
 }

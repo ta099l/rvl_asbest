@@ -194,5 +194,50 @@ class TypedCodes(unittest.TestCase):
         self.assertEqual((p.sample_id, p.confidence), ("S-03", "low"))
 
 
+def standard_register():
+    """Codes in RVL's standard notation: IHM prefix, dash, no leading zeros (Rolf, 6 Nov 2026)."""
+    rows = [
+        ("MM-1", "Engine room", "Pipe lagging", "grey fibrous"),
+        ("MM-2", "Boiler room", "Boiler door gasket", "black"),
+        ("CR6-1", "Cargo hold 2", "Primer layer on hatch coaming", "yellow"),
+        ("PAH-1", "Deck 1", "Bituminous deck covering", "black"),
+        ("HM-1", "Accommodation", "Railing paint", "red"),
+    ]
+    return [Sample(c, "", loc, "", mat, col) for c, loc, mat, col in rows]
+
+
+class StandardCodesAndAliases(unittest.TestCase):
+    def one(self, line):
+        return link("", standard_register(), "---\n" + line).proposals[0]
+
+    def test_padded_lab_code_matches_the_standard_code(self):
+        p = self.one("MM01 | Pipe lagging, engine room | Chrysotile 5%")
+        self.assertEqual((p.sample_id, p.confidence), ("MM-1", "medium"))
+
+    def test_older_notation_is_read_through_the_alias_table(self):
+        for raw, sid in (("CH6-01", "CR6-1"), ("Pac-01", "PAH-1"), ("M02", "MM-2")):
+            p = self.one(f"{raw} | " + {"CR6-1": "Primer hatch coaming, cargo hold 2",
+                                         "PAH-1": "Bituminous deck covering, deck 1",
+                                         "MM-2": "Boiler door gasket, boiler room"}[sid] + " | X")
+            self.assertEqual(p.sample_id, sid, raw)
+            self.assertEqual(p.confidence, "medium", raw)       # never high through an alias
+            self.assertIn("older notation", p.reason)
+
+    def test_exact_standard_code_stays_high(self):
+        p = self.one("CR6-1 | Primer hatch coaming, cargo hold 2 | Cr(VI) 120 mg/kg")
+        self.assertEqual((p.sample_id, p.confidence), ("CR6-1", "high"))
+
+    def test_unregistered_number_in_old_notation_is_not_guessed(self):
+        # M3 next to MM-1 and MM-2: a sample nobody registered, even in the old notation.
+        p = self.one("M3 | Boiler door gasket, boiler room | Chrysotile 40%")
+        self.assertEqual(p.status, "none")
+        self.assertIn("row:0:unregistered", p.flags)
+
+    def test_alias_does_not_join_different_tests(self):
+        # M is asbestos (MM), HM is heavy metals: M1 must not become HM-1.
+        p = self.one("M1 | Railing paint, accommodation | Pb 300 mg/kg")
+        self.assertNotEqual(p.sample_id, "HM-1")
+
+
 if __name__ == "__main__":
     unittest.main()
