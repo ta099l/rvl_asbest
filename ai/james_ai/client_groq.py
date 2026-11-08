@@ -119,12 +119,14 @@ class GroqClient:
                         if isinstance(value, str) and value:
                             value = value.replace(self.api_key, "[REDACTED]")
                             value = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", value)
+                            value = re.sub(r"org_[A-Za-z0-9]+", "org_[REDACTED]", value)   # account ID
                             safe_fields.append(value[:500])
                     if safe_fields:
                         details = ": " + " | ".join(safe_fields)
                 if not details and raw_error:
                     safe_body = raw_error.replace(self.api_key, "[REDACTED]")
                     safe_body = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", safe_body)
+                    safe_body = re.sub(r"org_[A-Za-z0-9]+", "org_[REDACTED]", safe_body)
                     details = ": " + safe_body[:500]
             except (json.JSONDecodeError, AttributeError):
                 pass

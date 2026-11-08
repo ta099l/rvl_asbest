@@ -1,0 +1,311 @@
+{
+  "set": "dev",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 12,
+  "ai_answered": 11,
+  "sent_to_ai": 8,
+  "counts": {
+    "rules": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 2
+    },
+    "ai": {
+      "correct": 9,
+      "wrong": 1,
+      "abstained_ok": 1,
+      "abstained_missed": 1
+    },
+    "hybrid": {
+      "correct": 9,
+      "wrong": 1,
+      "abstained_ok": 1,
+      "abstained_missed": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "d1",
+      "tag": "clean",
+      "line": "S-01 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "S-01",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "S-01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-01",
+        "reason": "matches description",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d2",
+      "tag": "separator",
+      "line": "S02 | Exhaust pipe lagging, engine room | Asbestos not detected",
+      "truth": "S-02",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-02",
+        "reason": "ID \"S02\" normalised to S-02 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-02",
+        "reason": "Matches sample S-02 by location and material",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-02",
+        "reason": "Rules and AI agree on S-02. Rules: ID \"S02\" normalised to S-02 (case, spaces, zero padding). Description agrees (100%). AI: Matches sample S-02 by location and material",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d3",
+      "tag": "case",
+      "line": "s-03 | Boiler door gasket, black | Chrysotile 40%",
+      "truth": "S-03",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-03",
+        "reason": "ID \"s-03\" normalised to S-03 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-03",
+        "reason": "matches code and description",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-03",
+        "reason": "Rules and AI agree on S-03. Rules: ID \"s-03\" normalised to S-03 (case, spaces, zero padding). Description agrees (100%). AI: matches code and description",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d4",
+      "tag": "spacing",
+      "line": "S 04 | Ceiling panel, corridor deck 2 | Asbestos not detected",
+      "truth": "S-04",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-04",
+        "reason": "ID \"S 04\" normalised to S-04 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-04",
+        "reason": "Matches register code S-04 for ceiling panel in corridor deck 2",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-04",
+        "reason": "Rules and AI agree on S-04. Rules: ID \"S 04\" normalised to S-04 (case, spaces, zero padding). Description agrees (100%). AI: Matches register code S-04 for ceiling panel in corridor deck 2",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d5",
+      "tag": "ID conflict",
+      "line": "S-05 | Flange gasket, steering gear room | Asbestos not detected",
+      "truth": "S-06",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID says S-05 but the description matches S-06 (100%) and S-05 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": "S-06",
+        "reason": "description matches register sample S-06",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID says S-05 but the description matches S-06 (100%) and S-05 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_missed"
+      }
+    },
+    {
+      "id": "d6",
+      "tag": "unknown ID",
+      "line": "S-09 | Hatch coaming seal, hold 2 | Asbestos not detected",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"S-09\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses S codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "S-09 not present in register",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"S-09\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses S codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "d7",
+      "tag": "no ID",
+      "line": "- | Pump packing, pump room, grey-white woven | Asbestos not detected",
+      "truth": "S-08",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-08",
+        "reason": "No ID on this lab line. Matched on description only: S-08 (100%, next best 33%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-08",
+        "reason": "Matches Pump room sample S-08",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-08",
+        "reason": "Rules and AI agree on S-08. Rules: No ID on this lab line. Matched on description only: S-08 (100%, next best 33%). Low confidence, inspector must confirm. AI: Matches Pump room sample S-08",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d8",
+      "tag": "clean",
+      "line": "S-07 | Bulkhead coating, cargo hold 1, red-brown | Asbestos not detected",
+      "truth": "S-07",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "S-07",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-07",
+        "reason": "Lab sample ID matches register code S-07",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-07",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d9",
+      "tag": "Dutch",
+      "line": "S-08 | Pompafdichting, pompruimte | Asbest niet aangetoond",
+      "truth": "S-08",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-08",
+        "reason": "ID matches register exactly. Description only partly agrees (0%), please check.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "S-08",
+        "reason": "matches register code",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-08",
+        "reason": "Rules and AI agree on S-08. Rules: ID matches register exactly. Description only partly agrees (0%), please check. AI: matches register code",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d10",
+      "tag": "Dutch, typo",
+      "line": "S-0 4 | Plafondplaat, gang dek 2 | Asbest niet aangetoond",
+      "truth": "S-04",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"S-0 4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": "S-04",
+        "reason": "location matches Accommodation deck 2, corridor",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "S-04",
+        "reason": "AI: location matches Accommodation deck 2, corridor (Rules found no safe link: ID \"S-0 4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.) The model's high confidence is capped at medium.",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "d11",
+      "tag": "too vague",
+      "line": "- | Gasket | Asbestos not detected",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": null,
+        "reason": "No ID on this lab line. Two or more samples fit the description equally (S-03 and S-06). No link proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "S-03",
+        "reason": "lab description matches Gasket in register",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": "S-03",
+        "reason": "AI: lab description matches Gasket in register (Rules found no safe link: No ID on this lab line. Two or more samples fit the description equally (S-03 and S-06). No link proposed.) The model's high confidence is capped at medium.",
+        "outcome": "wrong"
+      }
+    },
+    {
+      "id": "d12",
+      "tag": "letter O",
+      "line": "S-O3 | Boiler door seal, black | Chrysotile 40%",
+      "truth": "S-03",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "S-03",
+        "reason": "ID \"S-O3\" is not in the sample register. Matched on description only: S-03 (75%, next best 0%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 429: rate_limit_exceeded | tokens | Rate limit reached for model `openai/gpt-oss-20b` in organization `org_[REDACTED]` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 7840, Requested 830. Please try again in 5.025s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "S-03",
+        "reason": "ID \"S-O3\" is not in the sample register. Matched on description only: S-03 (75%, next best 0%). Low confidence, inspector must confirm. AI not used: AI call failed (RuntimeError: Groq returned HTTP 429: rate_limit_exceeded | tokens | Rate limit reached for model `openai/gpt-oss-20b` in organization `org_[REDACTED]` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 7840, Requested 830. Please try again in 5.025s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing).",
+        "outcome": "correct"
+      }
+    }
+  ],
+  "replay": null,
+  "provider": "groq",
+  "model": "openai/gpt-oss-20b",
+  "run_at": "2026-11-08T23:30:58+00:00",
+  "commit": "150cbbd"
+}

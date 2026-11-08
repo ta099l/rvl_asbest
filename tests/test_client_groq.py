@@ -40,6 +40,19 @@ class GroqRequest(unittest.TestCase):
         req = self.sent_request()
         self.assertEqual(req.get_header("Authorization"), f"Bearer {FAKE_KEY}")
 
+    def test_error_message_hides_key_and_account_id(self):
+        body = json.dumps({"error": {"code": "rate_limit_exceeded", "type": "tokens",
+                                     "message": f"Limit reached in organization org_01abcXYZ for {FAKE_KEY}"}})
+        err = client_groq.urllib.error.HTTPError(client_groq.API_URL, 429, "Too Many Requests", {},
+                                                 io.BytesIO(body.encode("utf-8")))
+        with mock.patch.object(client_groq.urllib.request, "urlopen", side_effect=err):
+            with self.assertRaises(RuntimeError) as ctx:
+                GroqClient().complete("prompt text")
+        text = str(ctx.exception)
+        self.assertIn("HTTP 429", text)
+        self.assertNotIn(FAKE_KEY, text)
+        self.assertNotIn("org_01abcXYZ", text)
+
     def test_missing_key_stops_before_any_call(self):
         with mock.patch.dict(os.environ, {"GROQ_API_KEY": ""}):
             with self.assertRaises(RuntimeError):
