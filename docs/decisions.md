@@ -148,3 +148,11 @@ None on the contract: the app already sends one register per request, which will
 - **Supersedes:** the 2 Nov test that `CR601` and `CH601` are different keys still holds for `id_key`; the alias match is a separate, weaker step.
 - **New test set `dev3`:** 10 lines on a register in the standard notation (no separator, old notation, unregistered TBT-2, a CR6/HM prefix conflict, a lab's own code, no ID). Reference answers were written before running the rules. Rules: 8 correct, 0 wrong, 2 abstained OK, 0 missed. `dev` and `dev2` unchanged.
 - **Agreed by:** Tasnim (owner of `ai/`). Code standard: Rolf.
+
+## 2026-11-06: Optional Groq client for fictional-data evaluation
+
+- **What:** added `ai/james_ai/client_groq.py` implementing the existing `complete(text) -> str` client interface. `JAMES_AI_PROVIDER=groq` opts the app into Groq; replay remains the default. The key is read from `GROQ_API_KEY`, never a project file. The client requests strict structured JSON, validates it through the existing contract after return, uses a timeout, and logs model/prompt fingerprint/token usage/estimated cost without logging prompt text. AI-only links cannot claim high confidence; the hybrid caps these at medium.
+- **Why:** connect the existing proposal workflow to a live model in a controlled way and compare two current Groq models on the same fictional cases before choosing by quality/cost.
+- **Model plan:** `openai/gpt-oss-20b` is the lower-cost starting candidate; `openai/gpt-oss-120b` is the quality challenger. Groq's listed rates and the task-specific evaluation plan are in `docs/groq-model-selection.md`.
+- **Safety/status:** fictional data only until RVL and the coach approve provider and data scope. No Groq call or model result has yet been recorded in this repository. Rolf's approval of the sample-code conventions does not imply approval to send reports to Groq.
+- **Agreed by:** Tasnim (requested the integration). Real-report data approval: not recorded.

@@ -93,8 +93,14 @@ def hybrid(request: dict, client: Client, version: str = DEFAULT_PROMPT,
                 mine["reason"] = f"Rules and AI agree on {a['sample']}. Rules: {mine['reason']} AI: {a['reason']}"
             source[n] = "both"
         elif mine["sample"] is None:
-            out[n] = {"n": n, "sample": a["sample"], "confidence": a["confidence"],
-                      "reason": f"AI: {a['reason']} (Rules found no safe link: {mine['reason']})"}
+            # A model cannot verify its own confidence. Keep an AI-only link below
+            # high confidence; only objective rule checks may label a link high.
+            confidence = "medium" if a["confidence"] == "high" else a["confidence"]
+            reason = f"AI: {a['reason']} (Rules found no safe link: {mine['reason']})"
+            if a["confidence"] == "high":
+                reason += " The model's high confidence is capped at medium."
+            out[n] = {"n": n, "sample": a["sample"], "confidence": confidence,
+                      "reason": reason}
             source[n] = "ai"
         else:
             out[n] = {"n": n, "sample": None, "confidence": None,

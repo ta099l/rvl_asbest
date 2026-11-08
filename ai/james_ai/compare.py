@@ -26,6 +26,25 @@ from .score import CASES_FILE, HOLD, OUTCOMES, RUNS_DIR, load_cases, save_run
 VARIANTS = ("rules", "ai", "hybrid")
 
 
+class MemoizedClient:
+    """Reuse the exact AI reply when the comparison asks the same prompt twice."""
+
+    def __init__(self, client):
+        self.client = client
+        self.answers = {}
+
+    def complete(self, text: str) -> str:
+        if text not in self.answers:
+            try:
+                self.answers[text] = self.client.complete(text)
+            except Exception as exc:
+                self.answers[text] = exc
+        answer = self.answers[text]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
 def case_request(case: dict, register: List[dict]) -> dict:
     """One test case as a one-line contract request."""
     row = parse_report("---\n" + case["line"])[1][0]
@@ -59,7 +78,10 @@ def compare_set(data: dict, set_name: str, client: ReplayClient, version: str = 
 
 
 def table(result: dict, details: bool = True) -> str:
+    provider = result.get("provider", "replay")
+    model = f", model {result['model']}" if result.get("model") else ""
     out = [f"Set {result['set']}: {result['lines']} lines, prompt {result['prompt']}, "
+           f"provider {provider}{model}, "
            f"AI answers found for {result['ai_answered']} of {result['lines']}, "
            f"hybrid sent {result['sent_to_ai']} to the AI", "",
            f"  {'variant':8}" + "".join(f"{k:>18}" for k in OUTCOMES)]
@@ -101,6 +123,9 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     ap = argparse.ArgumentParser(description="Compare rules only, AI only and hybrid on a test set.")
     ap.add_argument("--set", required=True, choices=sorted(data["sets"]), dest="set_name")
     ap.add_argument("--replay", type=Path, help="replay file with recorded AI answers")
+    ap.add_argument("--provider", choices=("replay", "groq"), default="replay",
+                    help="use saved answers (default) or call Groq with fictional test data")
+    ap.add_argument("--model", help="Groq model ID; defaults to openai/gpt-oss-20b")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT, help="prompt version in ai/prompts/")
     ap.add_argument("--export-prompts", type=Path, metavar="FILE",
                     help="write the prompts of this set to a replay file to fill in, then stop")
@@ -115,16 +140,29 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
         print(f"Wrote {args.export_prompts}: {empty} prompts still need an answer.")
         return 0
 
-    client = ReplayClient(args.replay)
+    if args.provider == "groq" and args.replay:
+        ap.error("--replay can only be used with --provider replay")
+    if args.provider == "replay" and args.model:
+        ap.error("--model can only be used with --provider groq")
+    if args.provider == "groq":
+        from .client_groq import GroqClient
+        client = GroqClient(model=args.model, prompt_version=args.prompt)
+        model = client.model
+    else:
+        client = ReplayClient(args.replay)
+        model = None
+    client = MemoizedClient(client)
     result = compare_set(data, args.set_name, client, args.prompt)
     result["replay"] = str(args.replay) if args.replay else None
+    result["provider"] = args.provider
+    result["model"] = model
     if args.set_name == HOLD:
         print("WARNING: hold-out set. Use it once per final version and never tune on it.\n")
         print(table(result, details=False))
         print(f"\nSaved: {save_run(result, runs_dir)}")
     else:
         print(table(result))
-        if not args.replay:
+        if args.provider == "replay" and not args.replay:
             print("\nNo replay file given: the AI column shows what happens when the AI gives no answer.")
         if args.save:
             print(f"\nSaved: {save_run(result, runs_dir)}")

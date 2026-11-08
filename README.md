@@ -1,6 +1,6 @@
 # James — lab agent prototype (RVL Asbest, minor DT&AI)
 
-A concept prototype for RVL's IHM surveys: register sources and samples, read a lab report, let the agent propose a link per result, let a named surveyor decide, and fill RVL's IHM template with the approved results. **All data is fictitious. No real AI runs yet** (a recorded stand-in answers).
+A concept prototype for RVL's IHM surveys: register sources and samples, read a lab report, let the agent propose a link per result, let a named surveyor decide, and fill RVL's IHM template with the approved results. **All data is fictitious. Replay answers are the default; an optional Groq client is available for controlled evaluation with fictional data.**
 
 The agent only proposes. A named person approves, corrects or rejects every link. Nothing is final without that.
 
@@ -21,6 +21,8 @@ The agent only proposes. A named person approves, corrects or rejects every link
    ```
 4. Copy RVL's documents into a folder `context\` in the project (ask Ivan or Tasnim; they are shared through the team folder, **never through GitHub**). The app needs `context\IHM 26-.odt` for the Word download; everything else works without it.
 5. Start: double-click **`start_james.bat`**, or type `python app\server.py --db james.db`. The browser opens http://127.0.0.1:8000. Keep the black window open; close it (or press Ctrl+C) to stop.
+
+To opt in to Groq, follow `docs/using-groq.md`. Use fictional data until RVL and the coach approve any broader data use.
 
 ## Use it
 
@@ -66,4 +68,6 @@ Without installing anything, the flow can be seen in the demo artifact (ask Ivan
 | `docs/questions-rolf-joris.md` | open questions for RVL, each linked to the test it blocks |
 | `docs/what-we-built.md` | each piece in three lines: what, why, example |
 | `docs/glossary.md` | every term in one plain sentence |
+| `docs/using-groq.md` | optional setup for testing the AI step with Groq and fictional data |
+| `docs/groq-model-selection.md` | current Groq prices and the proposed quality/cost comparison |
 | `CLAUDE.md` | the standing brief for Claude Code sessions in this folder |
