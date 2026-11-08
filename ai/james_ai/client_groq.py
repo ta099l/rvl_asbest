@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,9 @@ from typing import Optional
 
 
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Groq's firewall (Cloudflare) refuses Python's default "Python-urllib" User-Agent
+# with HTTP 403, error code 1010, so the client names itself.
+USER_AGENT = "james-rvl/0.1"
 DEFAULT_MODEL = "openai/gpt-oss-20b"
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -91,6 +95,7 @@ class GroqClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
+                "User-Agent": USER_AGENT,
             },
             method="POST",
         )
@@ -99,8 +104,31 @@ class GroqClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            # Do not include the response body: provider errors can echo request details.
-            raise RuntimeError(f"Groq returned HTTP {exc.code}") from None
+            # Surface only the structured provider error fields so permission
+            # failures can be diagnosed. Never print request headers or body,
+            # and redact the configured key in case a provider echoes it.
+            details = ""
+            try:
+                raw_error = exc.read().decode("utf-8", errors="replace")
+                error_payload = json.loads(raw_error) if raw_error else {}
+                error = error_payload.get("error", {}) if isinstance(error_payload, dict) else {}
+                if isinstance(error, dict):
+                    fields = [error.get("code"), error.get("type"), error.get("message")]
+                    safe_fields = []
+                    for value in fields:
+                        if isinstance(value, str) and value:
+                            value = value.replace(self.api_key, "[REDACTED]")
+                            value = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", value)
+                            safe_fields.append(value[:500])
+                    if safe_fields:
+                        details = ": " + " | ".join(safe_fields)
+                if not details and raw_error:
+                    safe_body = raw_error.replace(self.api_key, "[REDACTED]")
+                    safe_body = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", safe_body)
+                    details = ": " + safe_body[:500]
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            raise RuntimeError(f"Groq returned HTTP {exc.code}{details}") from None
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Groq request failed ({type(exc.reason).__name__})") from None
 
