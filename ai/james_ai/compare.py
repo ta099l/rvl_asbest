@@ -14,6 +14,7 @@ in the file are kept. Paste each model answer into its "answer" field.
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -24,6 +25,19 @@ from .linker import parse_report
 from .score import CASES_FILE, HOLD, OUTCOMES, RUNS_DIR, load_cases, save_run
 
 VARIANTS = ("rules", "ai", "hybrid")
+
+
+class PacedClient:
+    """Wait between real calls, so a free tier's tokens-per-minute limit is not hit."""
+
+    def __init__(self, client, pause: float):
+        self.client, self.pause, self.calls = client, pause, 0
+
+    def complete(self, text: str) -> str:
+        if self.calls and self.pause > 0:
+            time.sleep(self.pause)
+        self.calls += 1
+        return self.client.complete(text)
 
 
 class MemoizedClient:
@@ -126,6 +140,8 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     ap.add_argument("--provider", choices=("replay", "groq"), default="replay",
                     help="use saved answers (default) or call Groq with fictional test data")
     ap.add_argument("--model", help="Groq model ID; defaults to openai/gpt-oss-20b")
+    ap.add_argument("--pause", type=float, default=0, metavar="SECONDS",
+                    help="wait between Groq calls (8 keeps the free tier under its limit)")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT, help="prompt version in ai/prompts/")
     ap.add_argument("--export-prompts", type=Path, metavar="FILE",
                     help="write the prompts of this set to a replay file to fill in, then stop")
@@ -151,7 +167,7 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     else:
         client = ReplayClient(args.replay)
         model = None
-    client = MemoizedClient(client)
+    client = MemoizedClient(PacedClient(client, args.pause))   # a repeated prompt is not paced
     result = compare_set(data, args.set_name, client, args.prompt)
     result["replay"] = str(args.replay) if args.replay else None
     result["provider"] = args.provider

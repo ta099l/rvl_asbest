@@ -41,9 +41,9 @@ read -s -p "Groq API key: " GROQ_API_KEY
 printf '\n'
 export GROQ_API_KEY
 for model in openai/gpt-oss-20b openai/gpt-oss-120b; do
-    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev --save
-    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev2 --save
-    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev3 --save
+    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev --pause 8 --save
+    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev2 --pause 8 --save
+    python3 -m ai.james_ai.compare --provider groq --model "$model" --set dev3 --pause 8 --save
 done
 unset GROQ_API_KEY
 ```
@@ -90,9 +90,9 @@ $keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
 try {
     $env:GROQ_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPointer)
     foreach ($model in @("openai/gpt-oss-20b", "openai/gpt-oss-120b")) {
-        & $py -m ai.james_ai.compare --provider groq --model $model --set dev --save
-        & $py -m ai.james_ai.compare --provider groq --model $model --set dev2 --save
-        & $py -m ai.james_ai.compare --provider groq --model $model --set dev3 --save
+        & $py -m ai.james_ai.compare --provider groq --model $model --set dev --pause 8 --save
+        & $py -m ai.james_ai.compare --provider groq --model $model --set dev2 --pause 8 --save
+        & $py -m ai.james_ai.compare --provider groq --model $model --set dev3 --pause 8 --save
     }
 } finally {
     Remove-Item Env:GROQ_API_KEY -ErrorAction SilentlyContinue
