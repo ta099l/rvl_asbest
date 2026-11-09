@@ -21,6 +21,7 @@ API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Groq's firewall (Cloudflare) refuses Python's default "Python-urllib" User-Agent
 # with HTTP 403, error code 1010, so the client names itself.
 USER_AGENT = "james-rvl/0.1"
+MAX_RETRY_WAIT = 30.0   # seconds; the free tier allows 8,000 tokens per minute
 DEFAULT_MODEL = "openai/gpt-oss-20b"
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -74,6 +75,22 @@ class GroqClient:
         self.prompt_version = prompt_version or os.environ.get("JAMES_GROQ_PROMPT_VERSION", "v1_baseline")
         self.max_completion_tokens = int(os.environ.get("JAMES_GROQ_MAX_COMPLETION_TOKENS", "4096"))
 
+    def _send(self, request: urllib.request.Request) -> dict:
+        """POST once; on HTTP 429 (tokens per minute used up) wait as Groq asks, then try once more."""
+        for attempt in (1, 2):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 or attempt == 2:
+                    raise
+                try:
+                    wait = float(exc.headers.get("retry-after", "10"))
+                except (TypeError, ValueError, AttributeError):
+                    wait = 10.0
+                time.sleep(min(max(wait, 1.0), MAX_RETRY_WAIT))
+        raise AssertionError("unreachable")
+
     def complete(self, text: str) -> str:
         """Send one prompt; failures are raised for ai_step to turn into no-link results."""
         body = json.dumps({
@@ -101,8 +118,7 @@ class GroqClient:
         )
         start = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            payload = self._send(request)
         except urllib.error.HTTPError as exc:
             # Surface only the structured provider error fields so permission
             # failures can be diagnosed. Never print request headers or body,

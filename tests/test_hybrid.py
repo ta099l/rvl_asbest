@@ -58,6 +58,16 @@ class WhatGoesToTheAI(unittest.TestCase):
         self.assertNotIn("Insulation wrap", lab_lines)      # high-confidence rule link
         self.assertNotIn("Flange gasket", lab_lines)        # conflicting evidence
 
+    def test_two_equal_candidates_are_not_sent_to_the_ai(self):
+        # dev case d11: "Gasket" fits S-03 and S-06 equally. The AI picked S-03 and was wrong.
+        req = {"report_id": "LAB-TEST-2", "register": REGISTER, "rows": [row(1, None, "Gasket")]}
+        client = AnswerClient("S-03")
+        run = hybrid(req, client)
+        self.assertEqual(run.sent, [])
+        self.assertIsNone(client.prompt)                    # the AI was never asked
+        self.assertEqual(samples(run), [None])
+        self.assertIn("equally", run.response["proposals"][0]["reason"])
+
     def test_nothing_to_send_means_no_ai_call(self):
         client = AnswerClient()
         run = hybrid(dict(REQUEST, rows=[REQUEST["rows"][0]]), client)

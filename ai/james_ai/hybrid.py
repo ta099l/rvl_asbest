@@ -3,8 +3,9 @@
 The rule-based linker runs on every line. Two kinds of line never go to the AI:
 - a link the rules made with high confidence (exact ID, description agrees);
 - a no-link the rules made because the evidence conflicts (ID says one sample,
-  description another; two lines claim one sample; prefix mismatch). The AI
-  cannot make contradicting evidence agree; it can only pick a side.
+  description another; two lines claim one sample; prefix mismatch; two samples
+  fit the description equally). The AI cannot make contradicting evidence agree;
+  it can only pick a side.
 Every other line (medium or low links, and lines the rules could not link) is
 sent to the AI in one request. Then:
 - rules and AI agree        -> the link stays;
@@ -23,7 +24,8 @@ from .linker import LinkRun, Proposal, link
 from .score import to_samples
 
 # rule flags that mean "the evidence conflicts": stays no link, never sent to the AI
-CONFLICT_FLAGS = ("conflict", "duplicate", "prefix_conflict", "collision", "unregistered")
+# "ambiguous" = two samples fit equally: on dev case d11 the AI picked one and was wrong.
+CONFLICT_FLAGS = ("conflict", "duplicate", "prefix_conflict", "collision", "unregistered", "ambiguous")
 
 
 @dataclass

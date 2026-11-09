@@ -156,3 +156,11 @@ None on the contract: the app already sends one register per request, which will
 - **Model plan:** `openai/gpt-oss-20b` is the lower-cost starting candidate; `openai/gpt-oss-120b` is the quality challenger. Groq's listed rates and the task-specific evaluation plan are in `docs/groq-model-selection.md`.
 - **Safety/status:** fictional data only until RVL and the coach approve provider and data scope. No Groq call or model result has yet been recorded in this repository. Rolf's approval of the sample-code conventions does not imply approval to send reports to Groq.
 - **Agreed by:** Tasnim (requested the integration). Real-report data approval: not recorded.
+
+## 2026-11-09: Two equal candidates never go to the AI; Groq retries once on a rate limit
+
+- **What:** in `ai/james_ai/hybrid.py`, `ambiguous` (two register samples fit the description equally) joins the conflict flags: the line stays "no link" and is not sent to the AI. In `ai/james_ai/client_groq.py`, an HTTP 429 (tokens per minute used up) waits as long as Groq's `retry-after` says, at most 30 seconds, and tries once more.
+- **Why:** the first working Groq run (dev, `openai/gpt-oss-20b`, prompt v1) linked case d11 `- | Gasket` to S-03 while S-03 and S-06 fit equally; the hybrid passed it on as a wrong link (hybrid 9 correct, 1 wrong). Two equal candidates is conflicting evidence (safety rule 2): the model can only guess a side. Case d12 in the same run got no AI answer because of the free-tier limit (8,000 tokens per minute).
+- **Effect:** with the same AI answers, d11 becomes "no link" (abstained OK), so the hybrid would be 9 correct, 0 wrong on dev. To confirm with a new run. The run of 8 Nov stays in `ai/runs/` as the evidence for this change.
+- **Also:** the Groq organisation ID in provider error messages is now redacted like the key, so it never ends up in saved runs.
+- **Agreed by:** Tasnim (owner of `ai/`).
