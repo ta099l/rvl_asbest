@@ -333,6 +333,7 @@ class Service:
                    "register": [{"code": s.id, "source": s.source, "location": s.location, "part": s.part,
                                  "material": s.material, "notes": s.notes, "photo": s.photo, "deck": s.deck,
                                  "status": s.status, "restriction": s.restriction, "drawing": s.drawing,
+                                 "quantity": s.quantity, "unit": s.unit,
                                  "missing": [n for n, v in (("source", s.source), ("deck", s.deck), ("photo", s.photo),
                                                             ("drawing", s.drawing)) if not v and s.status == "sampled"]}
                                 for s in reg],
