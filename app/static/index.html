@@ -318,7 +318,7 @@ function registration() {
     ${reg.length ? `<div class="tscroll"><table><tr><th>Code</th><th>Source</th><th>Deck</th><th>Location</th><th>Part</th><th>Material</th><th>Photo</th><th>Drawing</th><th>Quantity</th><th>Status</th><th></th><th></th></tr>${rows}</table></div>`
       : `<div class="empty">No samples registered yet.</div>`}
     <div class="regform" id="regform">
-      <label>Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="M01"></label>
+      <label>Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="MM-1"></label>
       <label>Source<input id="rf-source" value="${v("source")}" placeholder="B01"></label>
       <label>Deck<input id="rf-deck" value="${v("deck")}" placeholder="Deck 2"></label>
       <label class="wide">Location<input id="rf-location" value="${v("location")}" placeholder="Engine room, exhaust pipe"></label>

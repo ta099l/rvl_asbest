@@ -91,8 +91,8 @@ class ExportTests(unittest.TestCase):
 
     def test_rows_and_source_records_are_repeated_per_item(self):
         x = self.content(export(self.s.view(self.rid)["report"], self.tpl))
-        self.assertIn("Paint layer (3 coats) (HM01)", x)                     # I-1
-        self.assertEqual(x.count("Source B0"), 8)                           # 8 approved lines; M09 was rejected
+        self.assertIn("Paint layer (3 coats) (HM-1)", x)                     # I-1
+        self.assertEqual(x.count("Source B0"), 8)                           # 8 approved lines; MM-9 was rejected
         self.assertIn("This concerns Asbestos", x)
         self.assertIn(">C-4471-02<", x)
 

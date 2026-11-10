@@ -1,10 +1,20 @@
 """Tests for the app service layer and the IHM reading (fictional demo data only)."""
+import re
 import unittest
 
 from app.ihm import findings, part_i, section_2_3, sum_quantities, table_line
 from app.server import Service
 
 INSPECTOR = "Test Inspector"
+
+
+def same_code(written, registered):
+    """Same sample once case, hyphen, zero padding and the older M (= MM) are ignored."""
+    def norm(c):
+        m = re.match(r"([A-Za-z]+?)0*(\d+)$", c.replace("-", "").replace(" ", ""))
+        pre = m.group(1).upper() if m else c
+        return ("MM" if pre == "M" else pre) + (m.group(2) if m else "")
+    return norm(written) == norm(registered)
 
 
 class ServiceTests(unittest.TestCase):
@@ -19,7 +29,7 @@ class ServiceTests(unittest.TestCase):
         """Approve every proposal; a careful reviewer rejects lines whose ID does not match the proposal."""
         for x in self.s.view(rid)["report"]["rows"]:
             p = x["proposal"]["sample"]
-            ok = p and (not careful or x["raw_id"].replace("-", "") == p)
+            ok = p and (not careful or same_code(x["raw_id"], p))
             self.s.decide(rid, x["idx"], "approve" if ok else "reject", INSPECTOR, None, "")
 
     def test_labels_match_the_demo_artifact(self):
@@ -45,17 +55,17 @@ class ServiceTests(unittest.TestCase):
     def test_completeness_flags_missing_certificate_photo_and_result(self):
         r, _ = self.rep()
         flags = {(f["kind"], f["ref"]) for f in r["flags"]}
-        self.assertIn(("completeness", "HM01"), flags)     # no certificate number (TC07)
-        self.assertIn(("completeness", "ODS01"), flags)    # no photo
-        self.assertIn(("missing", "M04"), flags)           # sample without a lab result
-        self.assertIn(("limitation", "M05"), flags)        # not sampled (TC08)
+        self.assertIn(("completeness", "HM-1"), flags)     # no certificate number (TC07)
+        self.assertIn(("completeness", "ODS-1"), flags)    # no photo
+        self.assertIn(("missing", "MM-4"), flags)           # sample without a lab result
+        self.assertIn(("limitation", "MM-5"), flags)        # not sampled (TC08)
 
     def test_only_approved_lines_reach_the_report(self):
         _, rid = self.rep()
         self.s.decide(rid, 0, "approve", INSPECTOR, None, "")
         r, _ = self.rep(rid)
         samples = [s["sample"] for sec in r["ihm"]["sections"] for s in sec["samples"]]
-        self.assertEqual(samples, ["M01"])
+        self.assertEqual(samples, ["MM-1"])
         self.assertEqual([x["line"] for x in r["ihm"]["table_a"] if x["found"]], ["A-1 Asbestos"])
 
     def test_report_sections_follow_the_rvl_template(self):
@@ -69,8 +79,8 @@ class ServiceTests(unittest.TestCase):
                                          "A-3 Ozone Depleting Substances (ODS)", "B3 Lead – Paint"])
         self.assertEqual((found["A-2 Polychlorinated Biphenyls (PCB)"]["quantity"], found["A-2 Polychlorinated Biphenyls (PCB)"]["unit"]), (35, "kg"))
         self.assertIsNone(found["A-1 Asbestos"]["quantity"])        # m and pcs: not added up, the inspector fills it in
-        self.assertEqual([x["sample"] for x in ihm["part1"]["I-1"]], ["HM01"])      # paint
-        self.assertEqual([x["sample"] for x in ihm["limitations"]], ["M05"])
+        self.assertEqual([x["sample"] for x in ihm["part1"]["I-1"]], ["HM-1"])      # paint
+        self.assertEqual([x["sample"] for x in ihm["limitations"]], ["MM-5"])
         self.assertTrue(ihm["limitations"][0]["follow_up"].startswith("Treat as potentially containing hazardous"))
         record = ihm["sections"][0]["records"][0]
         self.assertEqual((record["source"], record["certificate"], record["quantity"]), ("B01", "C-4471-01", "12 m"))
@@ -107,7 +117,7 @@ class ServiceTests(unittest.TestCase):
         self.s.sign(rid, INSPECTOR)
         r, _ = self.rep(rid)
         self.assertEqual(r["signed"]["by"], INSPECTOR)
-        self.assertTrue(any("HM01" in i for i in r["signed"]["open_items"]))
+        self.assertTrue(any("HM-1" in i for i in r["signed"]["open_items"]))
         with self.assertRaises(ValueError):
             self.s.decide(rid, 0, "reject", INSPECTOR, None, "")
 
@@ -150,7 +160,7 @@ class ServiceTests(unittest.TestCase):
         rid2 = self.s.load_demo("b2")
         self.decide_all(rid2)
         self.s.save_history(rid2, INSPECTOR)
-        hist = self.s.view(rid2)["asset"]["samples"]["M03"]["history"]
+        hist = self.s.view(rid2)["asset"]["samples"]["MM-3"]["history"]
         self.assertTrue(hist[-1]["changed"])
 
 
@@ -170,53 +180,53 @@ class FieldRegistration(unittest.TestCase):
             self.s.new_project({"name": "MV X", "site": "", "project": "J-1"})
 
     def test_register_a_sample_and_link_a_pasted_report(self):
-        self.s.add_sample({"code": "M01", "deck": "Deck 2", "location": "Engine room", "material": "Gasket",
+        self.s.add_sample({"code": "MM-1", "deck": "Deck 2", "location": "Engine room", "material": "Gasket",
                            "quantity": "3", "unit": "pcs"}, INSPECTOR)
         rid = self.s.ingest("Lab", "---\nM01 | Gasket, engine room | Chrysotile 20%")
         r = self.s.view(rid)["report"]
-        self.assertEqual(r["rows"][0]["proposal"]["sample"], "M01")
+        self.assertEqual(r["rows"][0]["proposal"]["sample"], "MM-1")
 
     def test_registration_needs_a_name_and_the_minimum_fields(self):
         with self.assertRaises(ValueError):
-            self.s.add_sample({"code": "M01", "location": "Engine room", "material": "Gasket"}, "")
+            self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, "")
         with self.assertRaises(ValueError):
-            self.s.add_sample({"code": "M01", "location": "", "material": "Gasket"}, INSPECTOR)
+            self.s.add_sample({"code": "MM-1", "location": "", "material": "Gasket"}, INSPECTOR)
         with self.assertRaises(ValueError):          # not sampled without a reason
-            self.s.add_sample({"code": "M02", "location": "Void", "material": "Insulation", "status": "not sampled"}, INSPECTOR)
+            self.s.add_sample({"code": "MM-2", "location": "Void", "material": "Insulation", "status": "not sampled"}, INSPECTOR)
 
     def test_a_code_cannot_be_registered_twice(self):
-        self.s.add_sample({"code": "M01", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
         with self.assertRaises(ValueError):
-            self.s.add_sample({"code": "M01", "location": "Bridge", "material": "Tile"}, INSPECTOR)
+            self.s.add_sample({"code": "MM-1", "location": "Bridge", "material": "Tile"}, INSPECTOR)
 
     def test_changes_are_logged_and_the_code_never_changes(self):
-        self.s.add_sample({"code": "M01", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
-        self.s.update_sample("M01", {"photo": "F-001", "drawing": "GA-01 pos 1"}, "Other Inspector")
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
+        self.s.update_sample("MM-1", {"photo": "F-001", "drawing": "GA-01 pos 1"}, "Other Inspector")
         log = self.s.view(None)["register_log"]
         self.assertEqual([(e["action"], e["by"]) for e in log], [("added", INSPECTOR), ("changed", "Other Inspector")])
         self.assertIn("photo: – -> F-001", log[-1]["detail"])
         with self.assertRaises(ValueError):
-            self.s.store.update_sample(self.s.object_id, "M01", {"code": "M99"}, INSPECTOR)
+            self.s.store.update_sample(self.s.object_id, "MM-1", {"code": "M99"}, INSPECTOR)
 
     def test_a_changed_registration_marks_the_report_out_of_date_until_read_again(self):
-        self.s.add_sample({"code": "M01", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
         rid = self.s.ingest("Lab", "---\nM02 | Floor tile, cabin | Chrysotile 2%")
         self.assertIsNone(self.s.view(rid)["report"]["rows"][0]["proposal"]["sample"])
         self.s.store.db.execute("UPDATE lab_report SET ingested_at='2000-01-01 00:00:00' WHERE id=?", (rid,))
         self.s.read_at[rid] = "2000-01-01 00:00:00"
-        self.s.add_sample({"code": "M02", "location": "Cabin", "material": "Floor tile"}, INSPECTOR)
+        self.s.add_sample({"code": "MM-2", "location": "Cabin", "material": "Floor tile"}, INSPECTOR)
         self.assertTrue(self.s.view(rid)["report"]["stale"])
         self.s.reread(rid)
         r = self.s.view(rid)["report"]
         self.assertFalse(r["stale"])
-        self.assertEqual(r["rows"][0]["proposal"]["sample"], "M02")
+        self.assertEqual(r["rows"][0]["proposal"]["sample"], "MM-2")
 
     def test_a_linked_sample_cannot_become_not_sampled(self):
-        self.s.add_sample({"code": "M01", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR)
         rid = self.s.ingest("Lab", "---\nM01 | Gasket, engine room | Chrysotile 20%")
         self.s.decide(rid, 0, "approve", INSPECTOR, None, "")
         with self.assertRaises(ValueError):
-            self.s.update_sample("M01", {"status": "not sampled", "restriction": "No access"}, INSPECTOR)
+            self.s.update_sample("MM-1", {"status": "not sampled", "restriction": "No access"}, INSPECTOR)
 
     def test_demo_reports_only_for_the_demo_ship(self):
         with self.assertRaises(ValueError):
@@ -236,7 +246,7 @@ class IhmReading(unittest.TestCase):
 
     def test_substance_from_method_or_code_prefix(self):
         self.assertEqual(self.one("85 mg/kg", method="PCB (7 congeners)")["key"], "pcb")
-        self.assertEqual(self.one("85 mg/kg", code="PBS01")["key"], "pcb")
+        self.assertEqual(self.one("85 mg/kg", code="PBS-1")["key"], "pcb")
 
     def test_below_detection_limit(self):
         self.assertEqual(self.one("< 2 mg/kg (DL 2)", method="PCB")["status"], "below")
