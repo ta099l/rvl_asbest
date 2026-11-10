@@ -39,6 +39,7 @@ if str(ROOT) not in sys.path:
 from ai.james_ai.ai_step import ReplayClient            # noqa: E402
 from ai.james_ai.contract import ContractError          # noqa: E402
 from app import export_odt                              # noqa: E402
+from app.auth import COOKIE, LOGIN_PAGE, SESSION_SECONDS, Auth, parse_users  # noqa: E402
 from app.demo_data import SHIP                          # noqa: E402
 from app.ihm import (PART_I, SECTIONS_2_3, TABLE_LINES, findings, load_thresholds,  # noqa: E402
                      part_i, sample_type, section_2_3, sum_quantities, table_line)
@@ -582,8 +583,48 @@ class Service:
 SERVICE: Service
 
 
+AUTH = Auth({})      # replaced in main(): no users = no login (own laptop)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "James/0.1"
+
+    # --- login helpers ---------------------------------------------------------------
+    def client_address_text(self) -> str:
+        forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        return forwarded or self.client_address[0]
+
+    def current_user(self) -> Optional[str]:
+        """The logged-in name; "" when login is switched off; None when login is needed."""
+        if not AUTH.enabled:
+            return ""
+        return AUTH.user_from_cookie_header(self.headers.get("Cookie"))
+
+    def secure_cookie(self) -> str:
+        return "; Secure" if (self.headers.get("X-Forwarded-Proto") or "").lower() == "https" else ""
+
+    def send_html(self, text: str, status: int = 200) -> None:
+        data = text.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def redirect(self, where: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", where)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def send_view(self, rid, user: str) -> None:
+        out = SERVICE.view(rid)
+        out["me"] = user
+        out["login"] = AUTH.enabled
+        self.send_json(out)
 
     def log_message(self, fmt, *args):      # keep the console quiet
         pass
@@ -599,14 +640,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        user = self.current_user()
+        if path == "/login" and AUTH.enabled:
+            return self.redirect("/") if user else self.send_html(LOGIN_PAGE)
+        if path == "/healthz":
+            return self.send_json({"ok": True})
+        if user is None:                                     # login needed
+            if path.startswith("/api/"):
+                return self.send_json({"error": "login required"}, 401)
+            return self.redirect("/login")
         if path in ("/", "/index.html"):
-            data = (STATIC / "index.html").read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
+            self.send_html((STATIC / "index.html").read_text(encoding="utf-8"))
         elif path == "/api/export":
             q = dict(kv.split("=", 1) for kv in self.path.partition("?")[2].split("&") if "=" in kv)
             try:
@@ -624,7 +668,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/state":
             q = dict(kv.split("=", 1) for kv in self.path.partition("?")[2].split("&") if "=" in kv)
             rid = int(q["report"]) if q.get("report", "").isdigit() else None
-            self.send_json(SERVICE.view(rid))
+            self.send_view(rid, user)
         else:
             self.send_json({"error": "not found"}, 404)
 
@@ -633,6 +677,35 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length) or b"{}")
             path = self.path.split("?")[0]
+            if path == "/api/login" and AUTH.enabled:
+                who = AUTH.check(body.get("name", ""), body.get("password", ""), self.client_address_text())
+                if who is None:
+                    if AUTH.blocked(self.client_address_text()):
+                        return self.send_json({"error": "Too many tries. Wait a minute."}, 429)
+                    return self.send_json({"error": "Wrong name or password."}, 401)
+                data = json.dumps({"ok": True, "me": who}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Set-Cookie", f"{COOKIE}={AUTH.make_token(who)}; Path=/; HttpOnly; SameSite=Lax; "
+                                               f"Max-Age={SESSION_SECONDS}{self.secure_cookie()}")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            if path == "/api/logout":
+                data = b'{"ok": true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Set-Cookie", f"{COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{self.secure_cookie()}")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            user = self.current_user()
+            if user is None:
+                return self.send_json({"error": "login required"}, 401)
+            if user:
+                body["by"] = user          # with login, the signature is always the logged-in name
             if path == "/api/reset":
                 SERVICE.reset()
                 rid = None
@@ -674,7 +747,7 @@ class Handler(BaseHTTPRequestHandler):
                 rid = SERVICE.ingest_pdf(body.get("label", ""), data)
             else:
                 return self.send_json({"error": "not found"}, 404)
-            self.send_json(SERVICE.view(rid))
+            self.send_view(rid, user)
         except (ValueError, KeyError, TypeError, json.JSONDecodeError, binascii.Error) as e:
             self.send_json({"error": str(e)}, 400)
 
@@ -682,13 +755,24 @@ class Handler(BaseHTTPRequestHandler):
 def main(argv: Optional[List[str]] = None) -> int:
     global SERVICE
     ap = argparse.ArgumentParser(description="James app (fictitious data, no real AI).")
-    ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 only on a network you trust")
-    ap.add_argument("--db", default=":memory:", help="a file name keeps the data between runs")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8000))
+    ap.add_argument("--host", default=None, help="default 127.0.0.1; on a host that sets PORT: 0.0.0.0")
+    ap.add_argument("--db", default=os.environ.get("JAMES_DB", ":memory:"),
+                    help="a file name keeps the data between runs (or set JAMES_DB)")
     args = ap.parse_args(argv)
+    global AUTH
+    AUTH = Auth(parse_users(os.environ.get("JAMES_USERS")), os.environ.get("JAMES_SECRET"))
+    args.host = args.host or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
+    if args.host not in ("127.0.0.1", "localhost") and not AUTH.enabled:
+        if os.environ.get("PORT"):
+            print("Refusing to start on a hosting service without a login: set JAMES_USERS.")
+            return 2
+        print("WARNING: no login. Anyone who can reach this address can use the app. "
+              "Set JAMES_USERS to switch the login on.")
     SERVICE = Service(args.db)
     srv = HTTPServer((args.host, args.port), Handler)
-    print(f"James is running: http://{args.host}:{args.port}   (stop with Ctrl+C)")
+    print(f"James is running: http://{args.host}:{args.port}   (stop with Ctrl+C)"
+          + ("   [login on]" if AUTH.enabled else ""))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,25 @@
+# Render blueprint for a shared copy of James: small paid server with a disk, so data is kept.
+# Fictitious data only until RVL and the coach approve real data (see docs/hosting.md).
+# The login is switched on by JAMES_USERS (filled in on the Render dashboard, never in this file).
+services:
+  - type: web
+    name: james
+    runtime: python
+    plan: starter            # about $7 a month; a disk needs a paid plan
+    region: frankfurt        # EU
+    buildCommand: pip install pdfplumber
+    startCommand: python app/server.py
+    healthCheckPath: /healthz
+    disk:
+      name: james-data
+      mountPath: /var/data
+      sizeGB: 1              # about $0.25 a month; can grow later, never shrink
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: JAMES_DB          # the database file lives on the disk
+        value: /var/data/james.db
+      - key: JAMES_USERS       # "Name:password;Other Name:password2"
+        sync: false
+      - key: JAMES_SECRET      # signs the login cookie
+        generateValue: true

@@ -165,6 +165,7 @@ let currentReport = null;
 async function api(path, body) {
   const opt = body === undefined ? {} : { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) };
   const res = await fetch(path, opt);
+  if (res.status === 401 && path !== "/api/login") { location.href = "/login"; throw new Error("login required"); }
   const data = await res.json();
   if (!res.ok) { toast(data.error || "Something went wrong"); throw new Error(data.error); }
   return data;
@@ -176,9 +177,10 @@ function toast(msg) {
 function localTime(ts) { return new Date(ts.replace(" ", "T") + "Z").toLocaleTimeString("en-GB"); }
 async function load(report) {
   const q = report ? "?report=" + report : "";
-  S = await api("/api/state" + q); currentReport = S.report ? S.report.id : null; render();
+  S = await api("/api/state" + q); currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render();
 }
-async function post(path, body) { S = await api(path, body); currentReport = S.report ? S.report.id : null; render(); }
+async function post(path, body) { S = await api(path, body); currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render(); }
+async function logout() { try { await fetch("/api/logout", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" }); } catch (e) {} location.href = "/login"; }
 
 const LABEL = { certain: "Certain", check: "Check", none: "No link" };
 const SRC = { rules: "rules", both: "rules + AI agree", ai: "AI only", disagree: "rules and AI disagree", guard: "guard: sample used twice",
@@ -204,7 +206,9 @@ function render() {
         <div><span>Ship type · flag</span><b>${esc(o.kind)}</b></div>
         <div><span>Survey location</span><b>${esc(o.site)}</b></div>
         <div><span>Survey date</span><b>${esc(o.survey_date || "–")}</b></div>
-        <div><span>Inspector (signs every decision)</span><input id="inspector" class="${inspector ? "" : "need"}" placeholder="Inspector name" value="${esc(inspector)}"></div>
+        <div><span>Inspector (signs every decision)</span>${S.login
+          ? `<b>${esc(S.me)}</b> <button id="logout" style="margin-left:6px">Log out</button>`
+          : `<input id="inspector" class="${inspector ? "" : "need"}" placeholder="Inspector name" value="${esc(inspector)}">`}</div>
       </div>
     </header>
     <div class="projbar">Project:
@@ -215,7 +219,8 @@ function render() {
     ${r ? screen(r) : `<div class="card"><div class="section-tag">Step 2 · Input</div><h2>Lab report</h2><p class="empty">No lab report yet for this project.${nreg ? "" : " Register the samples first, so the agent has something to link to."}</p>${buttons(null)}</div>`}
   `;
   const inp = $("#inspector");
-  inp.addEventListener("input", () => { inspector = inp.value; inp.classList.toggle("need", !inspector.trim()); });
+  if (inp) inp.addEventListener("input", () => { inspector = inp.value; inp.classList.toggle("need", !inspector.trim()); });
+  const lo = $("#logout"); if (lo) lo.onclick = logout;
   wire();
 }
 
