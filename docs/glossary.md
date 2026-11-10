@@ -30,6 +30,10 @@ Every term used in this project, in one plain sentence with an everyday comparis
 | **Conflicting evidence** | The code says one sample, the description another. We then propose no link. | Two witnesses telling different stories. |
 | **Prefix conflict** | `M12` written, but the text fits `HM12`: same number, another test. No link. | Two flats, 12A and 12B: same number, different door. |
 | **Unregistered code** | A proper code (like `OS02`) that is not in the register. No link, even if the text fits. | A ticket number the cloakroom never handed out. |
+| **Standard notation** | RVL's agreed way to write a sample code: IHM prefix, dash, no leading zeros (`MM-1`, `CR6-1`). Set by Rolf on 6 Nov 2026. | The official spelling of a street name. |
+| **Alias table** | A short list "old name → standard name" (`CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`). A match through it is at most medium confidence. | A street that was renamed: the old name still gets you there, but the postman double-checks. |
+| **OCR** | Optical character recognition: turning a picture of text (a scanned PDF) into real text the computer can read. | Retyping a photographed page. |
+| **Token** | The unit a language model reads and is billed in: a piece of a word, roughly ¾ of an English word. | Paying per syllable instead of per page. |
 | **AI (language model)** | A program that writes text answers to text questions, trained on a lot of text. | A very well-read assistant who sometimes confidently gets things wrong. |
 | **Prompt** | The exact text we send to the model: the task, the register, the lab lines, the answer format. | The instructions you give that assistant. |
 | **Prompt version** | One saved wording of the prompt (`v1_baseline`); a change makes a new version. | Drafts of an essay: v1, v2, v3. |

@@ -1,6 +1,6 @@
 # app/ — James lab-agent prototype (Ivan)
 
-Concept prototype. **All data is fictitious**, no real AI runs (a recorded stand-in answers).
+Concept prototype. **Use fictitious data.** Replay answers are used by default; a Groq API client can be enabled for controlled evaluation.
 The agent proposes, a named inspector decides.
 
 ## Start (Windows)
@@ -48,5 +48,8 @@ Open http://127.0.0.1:8000. Python 3 and `pdfplumber` (for PDF upload) only.
 | TC09 | processing time on the report card |
 | TC12 | practice review |
 
-## Not decided yet
-- Sample code notation (`M01` or `MM01`), thresholds, report template: see `docs/questions-rolf-joris.md`.
+## Still to confirm with RVL
+- Thresholds and report template details: see `docs/questions-rolf-joris.md`. Rolf confirmed the standard sample-code notation on 6 November; see `docs/decisions.md`.
+
+## Optional Groq model
+Follow `docs/using-groq.md` to enable Groq with an environment variable and compare supported models on fictional test cases. Do not send real RVL reports until RVL and the coach approve the provider and data scope.

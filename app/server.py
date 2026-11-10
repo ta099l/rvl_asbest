@@ -14,14 +14,15 @@ The AI part (ai/james_ai) only PROPOSES. This app shows every proposal with its
 reason, and only a named inspector can approve, correct or reject a line. Nothing
 reaches the draft chapters without that decision.
 
-Data is fictitious. There is no real AI behind this yet: the AI answers for demo
-report 1 are hand-written stand-ins (ai/replays/demo_ship.json).
+Replay answers are used by default. A Groq API client can be enabled explicitly
+with JAMES_AI_PROVIDER=groq; use fictional data unless RVL has approved more.
 """
 import argparse
 import base64
 import hashlib
 import binascii
 import json
+import os
 import re
 import sys
 import tempfile
@@ -97,7 +98,14 @@ class Service:
             self.read_at: Dict[int, str] = {}                 # report id -> when the agent last read it
             self.agent_log: List[dict] = []
             self.practice: Dict[int, Dict[int, str]] = {}   # report id -> {row idx: seeded wrong sample}
-            self.client = ReplayClient(DEMO_REPLAY)
+            provider = os.environ.get("JAMES_AI_PROVIDER", "replay").strip().lower()
+            if provider == "replay":
+                self.client = ReplayClient(DEMO_REPLAY)
+            elif provider == "groq":
+                from ai.james_ai.client_groq import GroqClient
+                self.client = GroqClient()
+            else:
+                raise RuntimeError("JAMES_AI_PROVIDER must be 'replay' or 'groq'")
             self.load_demo("b1")
 
     def log(self, report_id: int, text: str) -> None:

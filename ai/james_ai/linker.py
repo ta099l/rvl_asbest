@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 STOP = {"the", "of", "at", "on", "in", "and", "a", "an", "with", "near", "side", "to", "for"}
+# Prefixes that end in a digit (chromium-6). Without a separator, 'CR601' would
+# otherwise read as prefix 'CR' + number 601 instead of 'CR6' + 1.
+DIGIT_PREFIXES = ("CR6", "CH6")
+# Older notations for the same test, mapped to RVL's standard prefix (Rolf, 6 Nov 2026).
+# A match through an alias is never "high": the inspector sees which notation was read.
+ALIASES = {"CH6": "CR6", "PAC": "PAH", "M": "MM"}
 
 
 @dataclass
@@ -91,6 +97,9 @@ def code_parts(s: str) -> Optional[Tuple[str, str]]:
     parts = [p for p in re.split(r"[^A-Z0-9]+", t) if p]
     if len(parts) >= 2 and parts[-1].isdigit():
         return "".join(parts[:-1]), parts[-1].lstrip("0") or "0"
+    for p in DIGIT_PREFIXES:
+        if t.startswith(p) and t[len(p):].isdigit():
+            return p, t[len(p):].lstrip("0") or "0"
     m = re.match(r"^([A-Z]+)([0-9]+)$", t)
     if m:
         return m.group(1), m.group(2).lstrip("0") or "0"
@@ -107,6 +116,17 @@ def id_key(s: str) -> str:
     if len(parts) >= 2:
         return "".join(parts[:-1]) + "|" + re.sub(r"^0+(?=[0-9])", "", parts[-1])
     return t
+
+
+def std_prefix(prefix: str) -> str:
+    """The standard prefix for an older notation: 'CH6' -> 'CR6'; others unchanged."""
+    return ALIASES.get(prefix, prefix)
+
+
+def alias_key(s: str) -> Optional[str]:
+    """Like id_key, but with the prefix in standard notation: 'CH6-01' and 'CR6-1' agree."""
+    cp = code_parts(s)
+    return std_prefix(cp[0]) + "|" + cp[1] if cp else None
 
 
 def prefix_siblings(code: str, register: List["Sample"]) -> List["Sample"]:
@@ -200,9 +220,9 @@ def _unregistered_code(raw_id: str, best: str, prefixes: set) -> Optional[str]:
     lab, reg = code_parts(raw_id), code_parts(best)
     if not lab:
         return None
-    if reg and lab[1] == reg[1] and lab[0] != reg[0]:
+    if reg and lab[1] == reg[1] and std_prefix(lab[0]) != std_prefix(reg[0]):
         return f"{best} has the same number but prefix {reg[0]}, and the lab wrote {lab[0]}."
-    if lab[0] in prefixes:
+    if std_prefix(lab[0]) in prefixes:
         return f"The register uses {lab[0]} codes, so this looks like a sample that was not registered."
     return None
 
@@ -223,7 +243,10 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
             continue
         exact = by_id.get(r.raw_id.strip())
         norm = next((s for s in register if id_key(s.id) == id_key(r.raw_id)), None)
-        s = exact or norm
+        alias = None
+        if not (exact or norm) and alias_key(r.raw_id):
+            alias = next((s for s in register if alias_key(s.id) == alias_key(r.raw_id)), None)
+        s = exact or norm or alias
         if s is None:
             p.reason = f'ID "{r.raw_id}" is not in the sample register. '
             p.flags.append(f"row:{p.index}:unknown")
@@ -253,6 +276,13 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
             p.reason = ("ID matches register exactly. " +
                         (f"Description agrees ({pct(mine)})." if mine >= 0.5
                          else f"Description only partly agrees ({pct(mine)}), please check."))
+        elif alias:
+            lab_prefix = code_parts(r.raw_id)[0]
+            p.confidence = "medium" if mine >= 0.5 else "low"
+            p.reason = (f'ID "{r.raw_id}" uses {lab_prefix}, an older notation for {std_prefix(lab_prefix)}: '
+                        f"read as {s.id}. " +
+                        (f"Description agrees ({pct(mine)})." if mine >= 0.5
+                         else f"Description only partly agrees ({pct(mine)})."))
         else:
             p.confidence = "medium" if mine >= 0.5 else "low"
             p.reason = (f'ID "{r.raw_id}" normalised to {s.id} (case, spaces, zero padding). ' +
@@ -273,7 +303,7 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
                 p.flags.append(f"row:{p.index}:duplicate")
 
     claimed = {p.sample_id: p.index for p in props if p.status == "propose"}
-    prefixes = {cp[0] for cp in (code_parts(s.id) for s in register) if cp}
+    prefixes = {std_prefix(cp[0]) for cp in (code_parts(s.id) for s in register) if cp}
 
     # pass 2: description only (no ID, or unknown ID)
     for p in props:
@@ -310,7 +340,7 @@ def link(project: str, register: List[Sample], text: str) -> LinkRun:
         # same rule B as above, also when the description did not point anywhere,
         # so a later step (the AI) cannot link an unregistered code either
         lab = code_parts(r.raw_id) if p.status == "none" and _has_id(r) else None
-        if lab and lab[0] in prefixes:
+        if lab and std_prefix(lab[0]) in prefixes:
             p.reason += f" The register uses {lab[0]} codes, so this looks like a sample that was not registered."
             p.flags.append(f"row:{p.index}:unregistered")
 

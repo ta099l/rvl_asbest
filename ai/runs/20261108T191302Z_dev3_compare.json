@@ -1,0 +1,265 @@
+{
+  "set": "dev3",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 10,
+  "ai_answered": 0,
+  "sent_to_ai": 6,
+  "counts": {
+    "rules": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 0
+    },
+    "ai": {
+      "correct": 0,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 8
+    },
+    "hybrid": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "f1",
+      "tag": "clean",
+      "line": "MM-1 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "MM-1",
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "MM-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "MM-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f2",
+      "tag": "no separator",
+      "line": "CR601 | Primer, hatch coaming cargo hold 2 | Cr(VI) 120 mg/kg",
+      "truth": "CR6-1",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-1",
+        "reason": "ID \"CR601\" normalised to CR6-1 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "CR6-1",
+        "reason": "ID \"CR601\" normalised to CR6-1 (case, spaces, zero padding). Description agrees (100%). AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f3",
+      "tag": "old notation",
+      "line": "CH6-02 | Primer, hatch cover cargo hold 2 | Cr(VI) < 10 mg/kg",
+      "truth": "CR6-2",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-2",
+        "reason": "ID \"CH6-02\" uses CH6, an older notation for CR6: read as CR6-2. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "CR6-2",
+        "reason": "ID \"CH6-02\" uses CH6, an older notation for CR6: read as CR6-2. Description agrees (100%). AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f4",
+      "tag": "old notation",
+      "line": "M2 | Gasket, boiler door | Chrysotile 40%",
+      "truth": "MM-2",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "MM-2",
+        "reason": "ID \"M2\" uses M, an older notation for MM: read as MM-2. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "MM-2",
+        "reason": "ID \"M2\" uses M, an older notation for MM: read as MM-2. Description agrees (100%). AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f5",
+      "tag": "clean",
+      "line": "TBT-1 | Antifouling paint, hull below waterline | TBT 3200 mg/kg",
+      "truth": "TBT-1",
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "TBT-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "TBT-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f6",
+      "tag": "old notation",
+      "line": "Pac-01 | Bituminous deck covering, deck 1 | PAH 85 mg/kg",
+      "truth": "PAH-1",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PAH-1",
+        "reason": "ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "PAH-1",
+        "reason": "ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (100%). AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f7",
+      "tag": "unknown ID",
+      "line": "TBT-2 | Antifouling paint, rudder | TBT 1500 mg/kg",
+      "truth": null,
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"TBT-2\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses TBT codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"TBT-2\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses TBT codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "f8",
+      "tag": "prefix conflict",
+      "line": "CR6-1 | Railing paint, accommodation outside | Cr(VI) 40 mg/kg",
+      "truth": null,
+      "ai_answered": false,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID says CR6-1 but the description matches HM-1 (100%) and CR6-1 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID says CR6-1 but the description matches HM-1 (100%) and CR6-1 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "f9",
+      "tag": "lab's own code",
+      "line": "NL-2291 | Cable sheath, main switchboard engine room | PCB 30 mg/kg",
+      "truth": "PBS-1",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PBS-1",
+        "reason": "ID \"NL-2291\" is not in the sample register. Matched on description only: PBS-1 (100%, next best 33%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "PBS-1",
+        "reason": "ID \"NL-2291\" is not in the sample register. Matched on description only: PBS-1 (100%, next best 33%). Low confidence, inspector must confirm. AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f10",
+      "tag": "no ID",
+      "line": "- | Dust, ventilation grille cabin 214 | Asbestos not detected",
+      "truth": "KM-1",
+      "ai_answered": false,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "KM-1",
+        "reason": "No ID on this lab line. Matched on description only: KM-1 (100%, next best 0%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "AI call failed (RuntimeError: Groq returned HTTP 403). No link proposed; link by hand.",
+        "outcome": "abstained_missed"
+      },
+      "hybrid": {
+        "sample": "KM-1",
+        "reason": "No ID on this lab line. Matched on description only: KM-1 (100%, next best 0%). Low confidence, inspector must confirm. AI not used: AI call failed (RuntimeError: Groq returned HTTP 403).",
+        "outcome": "correct"
+      }
+    }
+  ],
+  "replay": null,
+  "provider": "groq",
+  "model": "openai/gpt-oss-20b",
+  "run_at": "2026-11-08T19:13:02+00:00",
+  "commit": "0b1bcc8+changes"
+}

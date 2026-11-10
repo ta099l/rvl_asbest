@@ -3,8 +3,9 @@
 The rule-based linker runs on every line. Two kinds of line never go to the AI:
 - a link the rules made with high confidence (exact ID, description agrees);
 - a no-link the rules made because the evidence conflicts (ID says one sample,
-  description another; two lines claim one sample; prefix mismatch). The AI
-  cannot make contradicting evidence agree; it can only pick a side.
+  description another; two lines claim one sample; prefix mismatch; two samples
+  fit the description equally). The AI cannot make contradicting evidence agree;
+  it can only pick a side.
 Every other line (medium or low links, and lines the rules could not link) is
 sent to the AI in one request. Then:
 - rules and AI agree        -> the link stays;
@@ -23,7 +24,8 @@ from .linker import LinkRun, Proposal, link
 from .score import to_samples
 
 # rule flags that mean "the evidence conflicts": stays no link, never sent to the AI
-CONFLICT_FLAGS = ("conflict", "duplicate", "prefix_conflict", "collision", "unregistered")
+# "ambiguous" = two samples fit equally: on dev case d11 the AI picked one and was wrong.
+CONFLICT_FLAGS = ("conflict", "duplicate", "prefix_conflict", "collision", "unregistered", "ambiguous")
 
 
 @dataclass
@@ -93,8 +95,14 @@ def hybrid(request: dict, client: Client, version: str = DEFAULT_PROMPT,
                 mine["reason"] = f"Rules and AI agree on {a['sample']}. Rules: {mine['reason']} AI: {a['reason']}"
             source[n] = "both"
         elif mine["sample"] is None:
-            out[n] = {"n": n, "sample": a["sample"], "confidence": a["confidence"],
-                      "reason": f"AI: {a['reason']} (Rules found no safe link: {mine['reason']})"}
+            # A model cannot verify its own confidence. Keep an AI-only link below
+            # high confidence; only objective rule checks may label a link high.
+            confidence = "medium" if a["confidence"] == "high" else a["confidence"]
+            reason = f"AI: {a['reason']} (Rules found no safe link: {mine['reason']})"
+            if a["confidence"] == "high":
+                reason += " The model's high confidence is capped at medium."
+            out[n] = {"n": n, "sample": a["sample"], "confidence": confidence,
+                      "reason": reason}
             source[n] = "ai"
         else:
             out[n] = {"n": n, "sample": None, "confidence": None,

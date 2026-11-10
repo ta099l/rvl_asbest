@@ -131,3 +131,36 @@ None on the contract: the app already sends one register per request, which will
 - **The template is not in the repository.** It is RVL's property (onboarding: templates only with permission). The app reads it from `context/IHM 26-.odt` or from the path in the environment variable `JAMES_IHM_TEMPLATE`. The tests use a small home-made template with the same patterns, plus one test on the real template when it is present.
 - **Not filled by the app:** consultation (2.2), desk research, the VSCP (appendix E) and the photos themselves. Those stay for the surveyor.
 - **Agreed by:** Ivan (27 Oct).
+
+## 2026-11-02: Chromium-6 codes keep the 6 in their prefix
+
+- **What:** `code_parts` in `ai/james_ai/linker.py` checks a short list of prefixes that end in a digit (`CR6`, `CH6`) before the general "letters, then digits" rule. `CR601`, `CR6-01` and `CR6 01` now all read as prefix `CR6`, number 1. `CR601` and `CH601` stay different codes.
+- **Why:** the IHM template writes chromium-6 codes as `CR600`, without a separator. The old rule read `CR601` as prefix `CR` + number 601, so a register entry `CR6-01` and a lab line `CR601` were seen as two different codes: a missed link, not a wrong one. Found while checking the sample code list for Rolf.
+- **Effect:** `dev` and `dev2` scores unchanged (no test case uses a code without a separator yet). 130 tests pass. Reports read before this change show "older than the current linker" in the app until read again.
+- **Still open:** which notation RVL really uses (`CR600` or `CH6-nn`, `MM00` or `M00`): question 1 for Rolf. Test cases with `CR6` and `TBT` codes follow after his answer.
+- **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-11-06: RVL's standard sample codes, with an alias table for older notations
+
+- **What:** James uses the IHM abbreviations as standard prefixes, written like `MM-1` and `CR6-1` (Rolf, 6 Nov 2026). The linker already treats `MM-1`, `MM01` and `MM1` as one code. New: an alias table in `ai/james_ai/linker.py` maps older notations to the standard prefix: `CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`. A link found only through an alias gets at most **medium** confidence, and the reason names the older notation ("CH6 is an older notation for CR6"). The rule that an unregistered code is never guessed also reads aliases, so `M3` next to `MM-1`, `MM-2` gets no link.
+- **Why:** Rolf asked that existing codes stay recognisable. Without the alias table `CH6-01` and `CR6-1` were seen as different codes: a missed link that costs the inspector time. Medium, not high, because a different notation is weaker evidence than an exact code.
+- **Not mapped:** `ZM` (meaning unknown, question 15). Aliases never join different tests: `M` (asbestos) never becomes `HM` (heavy metals).
+- **Supersedes:** the 2 Nov test that `CR601` and `CH601` are different keys still holds for `id_key`; the alias match is a separate, weaker step.
+- **New test set `dev3`:** 10 lines on a register in the standard notation (no separator, old notation, unregistered TBT-2, a CR6/HM prefix conflict, a lab's own code, no ID). Reference answers were written before running the rules. Rules: 8 correct, 0 wrong, 2 abstained OK, 0 missed. `dev` and `dev2` unchanged.
+- **Agreed by:** Tasnim (owner of `ai/`). Code standard: Rolf.
+
+## 2026-11-06: Optional Groq client for fictional-data evaluation
+
+- **What:** added `ai/james_ai/client_groq.py` implementing the existing `complete(text) -> str` client interface. `JAMES_AI_PROVIDER=groq` opts the app into Groq; replay remains the default. The key is read from `GROQ_API_KEY`, never a project file. The client requests strict structured JSON, validates it through the existing contract after return, uses a timeout, and logs model/prompt fingerprint/token usage/estimated cost without logging prompt text. AI-only links cannot claim high confidence; the hybrid caps these at medium.
+- **Why:** connect the existing proposal workflow to a live model in a controlled way and compare two current Groq models on the same fictional cases before choosing by quality/cost.
+- **Model plan:** `openai/gpt-oss-20b` is the lower-cost starting candidate; `openai/gpt-oss-120b` is the quality challenger. Groq's listed rates and the task-specific evaluation plan are in `docs/groq-model-selection.md`.
+- **Safety/status:** fictional data only until RVL and the coach approve provider and data scope. No Groq call or model result has yet been recorded in this repository. Rolf's approval of the sample-code conventions does not imply approval to send reports to Groq.
+- **Agreed by:** Tasnim (requested the integration). Real-report data approval: not recorded.
+
+## 2026-11-09: Two equal candidates never go to the AI; Groq retries once on a rate limit
+
+- **What:** in `ai/james_ai/hybrid.py`, `ambiguous` (two register samples fit the description equally) joins the conflict flags: the line stays "no link" and is not sent to the AI. In `ai/james_ai/client_groq.py`, an HTTP 429 (tokens per minute used up) waits as long as Groq's `retry-after` says, at most 30 seconds, and tries once more.
+- **Why:** the first working Groq run (dev, `openai/gpt-oss-20b`, prompt v1) linked case d11 `- | Gasket` to S-03 while S-03 and S-06 fit equally; the hybrid passed it on as a wrong link (hybrid 9 correct, 1 wrong). Two equal candidates is conflicting evidence (safety rule 2): the model can only guess a side. Case d12 in the same run got no AI answer because of the free-tier limit (8,000 tokens per minute).
+- **Effect:** with the same AI answers, d11 becomes "no link" (abstained OK), so the hybrid would be 9 correct, 0 wrong on dev. To confirm with a new run. The run of 8 Nov stays in `ai/runs/` as the evidence for this change.
+- **Also:** the Groq organisation ID in provider error messages is now redacted like the key, so it never ends up in saved runs.
+- **Agreed by:** Tasnim (owner of `ai/`).

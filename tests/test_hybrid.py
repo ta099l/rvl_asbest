@@ -58,6 +58,16 @@ class WhatGoesToTheAI(unittest.TestCase):
         self.assertNotIn("Insulation wrap", lab_lines)      # high-confidence rule link
         self.assertNotIn("Flange gasket", lab_lines)        # conflicting evidence
 
+    def test_two_equal_candidates_are_not_sent_to_the_ai(self):
+        # dev case d11: "Gasket" fits S-03 and S-06 equally. The AI picked S-03 and was wrong.
+        req = {"report_id": "LAB-TEST-2", "register": REGISTER, "rows": [row(1, None, "Gasket")]}
+        client = AnswerClient("S-03")
+        run = hybrid(req, client)
+        self.assertEqual(run.sent, [])
+        self.assertIsNone(client.prompt)                    # the AI was never asked
+        self.assertEqual(samples(run), [None])
+        self.assertIn("equally", run.response["proposals"][0]["reason"])
+
     def test_nothing_to_send_means_no_ai_call(self):
         client = AnswerClient()
         run = hybrid(dict(REQUEST, rows=[REQUEST["rows"][0]]), client)
@@ -110,10 +120,22 @@ class Guard(unittest.TestCase):
         self.assertEqual(samples(run), [None, None])
 
 
+class Pacing(unittest.TestCase):
+    def test_waits_between_real_calls_but_not_for_repeated_prompts(self):
+        from unittest import mock
+        from ai.james_ai import compare
+        client = compare.MemoizedClient(compare.PacedClient(AnswerClient("S-02"), 8))
+        with mock.patch.object(compare.time, "sleep") as sleep:
+            client.complete("prompt A")       # first call: no wait
+            client.complete("prompt A")       # same prompt: answered from memory, no wait
+            client.complete("prompt B")       # second real call: waits
+        sleep.assert_called_once_with(8)
+
+
 class Compare(unittest.TestCase):
     def test_without_answers_rules_and_hybrid_match_the_rules_score(self):
         data = load_cases()
-        for name in ("dev", "dev2"):
+        for name in ("dev", "dev2", "dev3"):
             r = compare_set(data, name, ReplayClient())
             self.assertEqual(r["counts"]["rules"], score_set(data, name)["counts"])
             self.assertEqual(r["counts"]["hybrid"], r["counts"]["rules"])

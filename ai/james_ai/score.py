@@ -1,6 +1,6 @@
 """Score the rule-based linker on the test cases in ai/testcases/cases.json.
 
-    python3 -m ai.james_ai.score --set dev      (or dev2, hold)
+    python3 -m ai.james_ai.score --set dev      (or dev2, dev3, hold)
 
 Each case is one lab line, linked on its own against the register of its set,
 so cross-line checks (two lines claiming one sample) never fire here. Outcomes
@@ -113,7 +113,7 @@ def main(argv: Optional[List[str]] = None, cases_file: Path = CASES_FILE,
     ap = argparse.ArgumentParser(description="Score the rule-based linker on a test set.")
     ap.add_argument("--set", required=True, choices=sorted(data["sets"]), dest="set_name")
     ap.add_argument("--save", action="store_true",
-                    help="also save a dev/dev2 run to ai/runs/ (hold-out runs are always saved)")
+                    help="also save a dev run to ai/runs/ (hold-out runs are always saved)")
     args = ap.parse_args(argv)
 
     result = score_set(data, args.set_name)
