@@ -18,12 +18,3 @@ Each question blocks a test case or a KPI. Write the answer and the date next to
 | 12 | Which fields does the inspector fill in per source and sample during fieldwork, and how are drawing positions recorded? | Success criterion 1 starts at field registration; the app does not have it yet. | Field registration screen, K7 |
 | 13 | Is the Technical Responsible Person always someone else than the surveyor? Must the app enforce that? | The template has both roles; the app now signs as Technical Responsible Person but does not check it is a different person. | Sign-off, K10 |
 | 14 | Should a source with only a visual assessment (V00, marking, document) be registered without a lab sample? | The template has assessment methods besides lab analysis; the app now treats every registered sample as sampled or not sampled. | TC08, K6 |
-
-## Answers from Rolf (10 Nov 2026, by email)
-
-- **Q1 (sample code notation): answered.** Use the English abbreviations from the IHM report as the standard, extended with the other surveys: MM (asbestos material), KM (asbestos dust), PBS, SS, OS (PCB), ODS, PFOS, HBCDD, HM, CR6, PAH, TBT, PFAS, NORM, TPH, VOC, VI (visual inspection), DR (document review), EI (equipment identification). **Numbering without leading zeros:** MM-1, CR6-1, HM-1. Existing codes such as CH6-01, ZM-01 and Pac-01 must stay recognisable. **The original sample codes on the lab certificates must always be kept.**
-- **Labs (new question, answered):** no standard layout yet. Each lab has its own layout and methods.
-- **Reporting software:** Word, for now.
-- **Q9 (time per report): answered.** About 4 to 8 hours of reporting work after the analyses are in. Longer for large IHM surveys. This is the baseline for K5.
-- **Volume:** hard to predict. Use scenarios of 10 to 25 reports per month. James must in the end also suit asbestos inventories, chromium-6 and other hazardous substances.
-- **Still open:** Q2 to Q8 and Q10 to Q14.
