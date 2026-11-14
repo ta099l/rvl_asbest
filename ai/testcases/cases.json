@@ -167,6 +167,68 @@
         "material": "Cable sheath",
         "colour": "black"
       }
+    ],
+    "structure_standard_codes": [
+      {
+        "code": "HM-1",
+        "location": "Damwand noordzijde",
+        "material": "Verflaag",
+        "colour": "grijs, 2 lagen"
+      },
+      {
+        "code": "CR6-1",
+        "location": "Damwand noordzijde",
+        "material": "Verflaag",
+        "colour": "grijs, 2 lagen"
+      },
+      {
+        "code": "HM-2",
+        "location": "Geluidsscherm, staander 3",
+        "material": "Verflaag",
+        "colour": "blauw, wit, 3 lagen"
+      },
+      {
+        "code": "CR6-2",
+        "location": "Geluidsscherm, staander 3",
+        "material": "Verflaag",
+        "colour": "blauw, wit, 3 lagen"
+      },
+      {
+        "code": "HM-3",
+        "location": "Pijler 2, oplegging",
+        "material": "Verflaag",
+        "colour": "zwart, oranje, 2 lagen"
+      },
+      {
+        "code": "CR6-3",
+        "location": "Pijler 2, oplegging",
+        "material": "Verflaag",
+        "colour": "zwart, oranje, 2 lagen"
+      },
+      {
+        "code": "PAH-1",
+        "location": "Geluidsscherm, voeg tussen betonelementen",
+        "material": "Bitumen",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-2",
+        "location": "Pijler 2, oplegging",
+        "material": "Bitumen",
+        "colour": "zwart"
+      },
+      {
+        "code": "SS-1",
+        "location": "Lichtmast 12, kabel",
+        "material": "Veegmonster kabel",
+        "colour": "zwart"
+      },
+      {
+        "code": "MM-1",
+        "location": "Landhoofd zuid, dilatatievoeg",
+        "material": "Voegvulling",
+        "colour": "grijs"
+      }
     ]
   },
   "sets": {
@@ -181,6 +243,9 @@
     },
     "dev3": {
       "register": "ship_standard_codes"
+    },
+    "dev4": {
+      "register": "structure_standard_codes"
     }
   },
   "cases": [
@@ -477,6 +542,90 @@
       "tag": "no ID",
       "line": "- | Dust, ventilation grille cabin 214 | Asbestos not detected",
       "truth": "KM-1"
+    },
+    {
+      "id": "g1",
+      "set": "dev4",
+      "tag": "clean",
+      "line": "HM-1 | Damwand noordzijde. Kleur: grijs, grijs. Lagen: 2 | Elementen: Lood (Pb) 150 mg/kg; Zink (Zn) 4200 mg/kg",
+      "truth": "HM-1"
+    },
+    {
+      "id": "g2",
+      "set": "dev4",
+      "tag": "old notation, place shared with HM-1",
+      "line": "CH6-01 | Damwand noordzijde. Kleur: grijs, grijs. Lagen: 2 | Chroom-6: <10 mg/kg",
+      "truth": "CR6-1"
+    },
+    {
+      "id": "g3",
+      "set": "dev4",
+      "tag": "old notation",
+      "line": "Pac-01 | Geluidsscherm tussen betonelementen bitumen. Kleur: zwart | PAK: all 16 parameters <0,1 mg/kg",
+      "truth": "PAH-1"
+    },
+    {
+      "id": "g4",
+      "set": "dev4",
+      "tag": "old notation, place shared with HM-3",
+      "line": "Pac-02 | Pijler 2 oplegging bitumen. Kleur: zwart | PAK: all 16 parameters <0,1 mg/kg",
+      "truth": "PAH-2"
+    },
+    {
+      "id": "g5",
+      "set": "dev4",
+      "tag": "unknown prefix ZM (ask Rolf)",
+      "line": "ZM-03 | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "g6",
+      "set": "dev4",
+      "tag": "PCB prefix not in standard (ask Rolf)",
+      "line": "PCB-01 | Op kabel bij lichtmast 12 | PCB's (7 congeners): all 8 parameters <0,1 mg/swipe",
+      "truth": null
+    },
+    {
+      "id": "g7",
+      "set": "dev4",
+      "tag": "no separator",
+      "line": "CR603 | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Chroom-6: <10 mg/kg (lab remark C)",
+      "truth": "CR6-3"
+    },
+    {
+      "id": "g8",
+      "set": "dev4",
+      "tag": "unknown ID",
+      "line": "HM-4 | Brugleuning staander. Kleur: oranje, wit. Lagen: 3 | Elementen: Lood (Pb) 25 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "g9",
+      "set": "dev4",
+      "tag": "result does not fit code",
+      "line": "CR6-2 | Geluidsscherm staander 3. Kleur: blauw, wit. Lagen: 3 | Elementen: Lood (Pb) 95 mg/kg; Zink (Zn) 18000 mg/kg",
+      "truth": null
+    },
+    {
+      "id": "g10",
+      "set": "dev4",
+      "tag": "leading zero",
+      "line": "HM-02 | Geluidsscherm staander 3. Kleur: blauw, wit. Lagen: 3 | Elementen: Lood (Pb) 110 mg/kg; Zink (Zn) 20000 mg/kg",
+      "truth": "HM-2"
+    },
+    {
+      "id": "g11",
+      "set": "dev4",
+      "tag": "no ID",
+      "line": "- | Landhoofd zuid dilatatievoeg. Kleur: grijs | Asbest niet aangetoond",
+      "truth": "MM-1"
+    },
+    {
+      "id": "g12",
+      "set": "dev4",
+      "tag": "no ID, result decides",
+      "line": "- | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
+      "truth": "HM-3"
     }
   ]
 }

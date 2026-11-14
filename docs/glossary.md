@@ -33,6 +33,9 @@ Every term used in this project, in one plain sentence with an everyday comparis
 | **Standard notation** | RVL's agreed way to write a sample code: IHM prefix, dash, no leading zeros (`MM-1`, `CR6-1`). Set by Rolf on 6 Nov 2026. | The official spelling of a street name. |
 | **Alias table** | A short list "old name → standard name" (`CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`). A match through it is at most medium confidence. | A street that was renamed: the old name still gets you there, but the postman double-checks. |
 | **OCR** | Optical character recognition: turning a picture of text (a scanned PDF) into real text the computer can read. | Retyping a photographed page. |
+| **Text layer** | The real text hidden inside a digital PDF. Without it (a scan) we need OCR. | A typed letter versus a photo of it. |
+| **Lab ID** | The lab's own number for a sample (`T-DEV4 001`). Not our code; the lab report ties the two together in its overview table. | The cloakroom's ticket number versus your own name. |
+| **Two-table layout** | A lab report with an overview table (lab ID → our code and place) and separate results tables (lab ID → values). The extractor joins them on the lab ID. | A seating plan plus a menu order list: you need both to know who ordered what. |
 | **Token** | The unit a language model reads and is billed in: a piece of a word, roughly ¾ of an English word. | Paying per syllable instead of per page. |
 | **AI (language model)** | A program that writes text answers to text questions, trained on a lot of text. | A very well-read assistant who sometimes confidently gets things wrong. |
 | **Prompt** | The exact text we send to the model: the task, the register, the lab lines, the answer format. | The instructions you give that assistant. |

@@ -1,0 +1,311 @@
+{
+  "set": "dev4",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 12,
+  "ai_answered": 12,
+  "sent_to_ai": 7,
+  "counts": {
+    "rules": {
+      "correct": 7,
+      "wrong": 1,
+      "abstained_ok": 3,
+      "abstained_missed": 1
+    },
+    "ai": {
+      "correct": 7,
+      "wrong": 4,
+      "abstained_ok": 1,
+      "abstained_missed": 0
+    },
+    "hybrid": {
+      "correct": 6,
+      "wrong": 2,
+      "abstained_ok": 2,
+      "abstained_missed": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "g1",
+      "tag": "clean",
+      "line": "HM-1 | Damwand noordzijde. Kleur: grijs, grijs. Lagen: 2 | Elementen: Lood (Pb) 150 mg/kg; Zink (Zn) 4200 mg/kg",
+      "truth": "HM-1",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "HM-1",
+        "reason": "ID matches register exactly. Description agrees (83%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "HM-1",
+        "reason": "matches register",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "HM-1",
+        "reason": "ID matches register exactly. Description agrees (83%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g2",
+      "tag": "old notation, place shared with HM-1",
+      "line": "CH6-01 | Damwand noordzijde. Kleur: grijs, grijs. Lagen: 2 | Chroom-6: <10 mg/kg",
+      "truth": "CR6-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-1",
+        "reason": "ID \"CH6-01\" uses CH6, an older notation for CR6: read as CR6-1. Description agrees (83%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "HM-1",
+        "reason": "Matches location, colour and layers",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "Rules say CR6-1, the AI says HM-1. They disagree, so no link is proposed. Rules: ID \"CH6-01\" uses CH6, an older notation for CR6: read as CR6-1. Description agrees (83%). AI: Matches location, colour and layers",
+        "outcome": "abstained_missed"
+      }
+    },
+    {
+      "id": "g3",
+      "tag": "old notation",
+      "line": "Pac-01 | Geluidsscherm tussen betonelementen bitumen. Kleur: zwart | PAK: all 16 parameters <0,1 mg/kg",
+      "truth": "PAH-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PAH-1",
+        "reason": "ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (83%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PAH-1",
+        "reason": "matches location, material and colour",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PAH-1",
+        "reason": "Rules and AI agree on PAH-1. Rules: ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (83%). AI: matches location, material and colour",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g4",
+      "tag": "old notation, place shared with HM-3",
+      "line": "Pac-02 | Pijler 2 oplegging bitumen. Kleur: zwart | PAK: all 16 parameters <0,1 mg/kg",
+      "truth": "PAH-2",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PAH-2",
+        "reason": "ID \"Pac-02\" uses PAC, an older notation for PAH: read as PAH-2. Description agrees (83%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PAH-2",
+        "reason": "Matches location and material",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PAH-2",
+        "reason": "Rules and AI agree on PAH-2. Rules: ID \"Pac-02\" uses PAC, an older notation for PAH: read as PAH-2. Description agrees (83%). AI: Matches location and material",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g5",
+      "tag": "unknown prefix ZM (ask Rolf)",
+      "line": "ZM-03 | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"ZM-03\" is not in the sample register. Two or more samples fit the description equally (HM-3 and CR6-3). No link proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "HM-3",
+        "reason": "matches location, material, colour and layers",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"ZM-03\" is not in the sample register. Two or more samples fit the description equally (HM-3 and CR6-3). No link proposed.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "g6",
+      "tag": "PCB prefix not in standard (ask Rolf)",
+      "line": "PCB-01 | Op kabel bij lichtmast 12 | PCB's (7 congeners): all 8 parameters <0,1 mg/swipe",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"PCB-01\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "SS-1",
+        "reason": "Matches cable sample SS-1 from lightmast 12.",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": "SS-1",
+        "reason": "AI: Matches cable sample SS-1 from lightmast 12. (Rules found no safe link: ID \"PCB-01\" is not in the sample register. No sample in the register fits the description well enough. No link proposed.) The model's high confidence is capped at medium.",
+        "outcome": "wrong"
+      }
+    },
+    {
+      "id": "g7",
+      "tag": "no separator",
+      "line": "CR603 | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Chroom-6: <10 mg/kg (lab remark C)",
+      "truth": "CR6-3",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-3",
+        "reason": "ID \"CR603\" normalised to CR6-3 (case, spaces, zero padding). Description agrees (86%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "CR6-3",
+        "reason": "matches location, material, colour and layers",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "CR6-3",
+        "reason": "Rules and AI agree on CR6-3. Rules: ID \"CR603\" normalised to CR6-3 (case, spaces, zero padding). Description agrees (86%). AI: matches location, material, colour and layers",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g8",
+      "tag": "unknown ID",
+      "line": "HM-4 | Brugleuning staander. Kleur: oranje, wit. Lagen: 3 | Elementen: Lood (Pb) 25 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"HM-4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses HM codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "No register sample matches the description",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"HM-4\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses HM codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "g9",
+      "tag": "result does not fit code",
+      "line": "CR6-2 | Geluidsscherm staander 3. Kleur: blauw, wit. Lagen: 3 | Elementen: Lood (Pb) 95 mg/kg; Zink (Zn) 18000 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "CR6-2",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "wrong"
+      },
+      "ai": {
+        "sample": "CR6-2",
+        "reason": "matches register entry exactly",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": "CR6-2",
+        "reason": "ID matches register exactly. Description agrees (86%).",
+        "outcome": "wrong"
+      }
+    },
+    {
+      "id": "g10",
+      "tag": "leading zero",
+      "line": "HM-02 | Geluidsscherm staander 3. Kleur: blauw, wit. Lagen: 3 | Elementen: Lood (Pb) 110 mg/kg; Zink (Zn) 20000 mg/kg",
+      "truth": "HM-2",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "HM-2",
+        "reason": "ID \"HM-02\" normalised to HM-2 (case, spaces, zero padding). Description agrees (86%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "HM-2",
+        "reason": "matches location, colour and layers",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "HM-2",
+        "reason": "Rules and AI agree on HM-2. Rules: ID \"HM-02\" normalised to HM-2 (case, spaces, zero padding). Description agrees (86%). AI: matches location, colour and layers",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g11",
+      "tag": "no ID",
+      "line": "- | Landhoofd zuid dilatatievoeg. Kleur: grijs | Asbest niet aangetoond",
+      "truth": "MM-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "MM-1",
+        "reason": "No ID on this lab line. Matched on description only: MM-1 (80%, next best 20%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "MM-1",
+        "reason": "matches location and colour",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "MM-1",
+        "reason": "Rules and AI agree on MM-1. Rules: No ID on this lab line. Matched on description only: MM-1 (80%, next best 20%). Low confidence, inspector must confirm. AI: matches location and colour",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "g12",
+      "tag": "no ID, result decides",
+      "line": "- | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
+      "truth": "HM-3",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "No ID on this lab line. Two or more samples fit the description equally (HM-3 and CR6-3). No link proposed.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": "HM-3",
+        "reason": "matches location, material, colour, layers",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "No ID on this lab line. Two or more samples fit the description equally (HM-3 and CR6-3). No link proposed.",
+        "outcome": "abstained_missed"
+      }
+    }
+  ],
+  "replay": null,
+  "provider": "groq",
+  "model": "openai/gpt-oss-20b",
+  "run_at": "2026-11-14T14:29:35+00:00",
+  "commit": "0856929+changes"
+}

@@ -164,3 +164,13 @@ None on the contract: the app already sends one register per request, which will
 - **Effect:** with the same AI answers, d11 becomes "no link" (abstained OK), so the hybrid would be 9 correct, 0 wrong on dev. To confirm with a new run. The run of 8 Nov stays in `ai/runs/` as the evidence for this change.
 - **Also:** the Groq organisation ID in provider error messages is now redacted like the key, so it never ends up in saved runs.
 - **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-11-14: Two-table lab layout in the extractor; test set dev4
+
+- **What:** `james/extract.py` reads the Dutch two-table lab layout (overview table: lab ID → our code and place; results tables: lab ID → values), joined on the lab ID. Output: `code | place | result | method | remarks`, with the lab ID in remarks. A result whose lab ID is not in the overview gets no code; a lab remark letter (such as C) stays with the result; a report that replaces an older version says so. Without this layout the old reader runs unchanged. Tasnim agreed to the change in Ivan's file.
+- **Data:** only the table structure is used; all codes, places and values in the code, tests and test data are invented.
+- **New set `dev4`:** 12 invented lines on an invented structure in that layout; `python3 -m ai.james_ai.make_lab_pdf --set dev4 --out dev4_lab.pdf` builds a PDF of it for the app. Reference answers written before running.
+- **Provisional answers:** g5 (`ZM-03`) and g6 (`PCB-01`) are "no link" until Rolf says what `ZM` and `PCB` map to. Change them only with a new entry here.
+- **Effect:** dev4 rules 7 / 1 / 3 / 1. The wrong link is g9: code `CR6-2` exists and the place fits, but the result is a heavy-metals panel; the rules do not read the result.
+- **First AI run (14 Nov, Groq `openai/gpt-oss-20b`, prompt v1):** AI only 7 / 4 / 1 / 0, hybrid 6 / 2 / 2 / 2, worse than the rules alone. The hybrid's extra wrong link is g6 (`PCB-01` → SS-1, only the AI proposed it); g2 became no link because rules and AI disagreed. The AI did solve g12 by reading the result, but the hybrid keeps that line from the AI. Two of the AI's four wrong links (g5, g6) depend on the provisional answers above.
+- **Agreed by:** Tasnim (owner of `ai/`).

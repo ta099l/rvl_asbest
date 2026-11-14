@@ -169,6 +169,153 @@ def _ocr_words(pdf_path: str, page_number: int) -> List[Word]:
     return words
 
 
+# ---------------------------------------------------------------------------
+# Dutch two-table layout: an overview table that ties the
+# lab's own ID to our sample code ("Uw referentie"), and one or more results
+# tables keyed by the lab's ID only. Ruled tables, read with pdfplumber's
+# table finder. Only the table structure is used here; tests use invented data.
+# ---------------------------------------------------------------------------
+
+def _norm(cell) -> str:
+    """Cell text with line breaks kept, pipes made safe for the 'a | b | c' row format."""
+    return (cell or "").replace("|", "/").strip()
+
+
+def _flat(cell) -> str:
+    return re.sub(r"\s+", " ", _norm(cell)).strip()
+
+
+def _key(cell) -> str:
+    """Lab ID as a join key. 'X-AB-8 015', 'X-AB-8\\n015' and 'X-AB-8 15' are one ID:
+    the lab sometimes drops leading zeros in one table but not the other."""
+    parts = _norm(cell).upper().split()
+    if len(parts) > 1 and parts[-1].isdigit():      # series, then the number on its own
+        return f"{''.join(parts[:-1])}#{int(parts[-1])}"
+    return "".join(parts)
+
+
+def _header(row) -> List[str]:
+    return [re.sub(r"[^a-z]", "", (c or "").lower()) for c in row]
+
+
+def _find(hdr: List[str], test) -> Optional[int]:
+    return next((i for i, h in enumerate(hdr) if test(h)), None)
+
+
+def _summary(test: str, names: List[str], values: List[str], units: List[str]) -> Tuple[str, bool]:
+    """One readable result text per sample, and whether the values could be paired safely."""
+    if not values:
+        return "", True
+    if len(units) != len(values):
+        units = [units[0]] * len(values) if len(set(units)) == 1 else [""] * len(values)
+    vals = [f"{v} {u}".strip() for v, u in zip(values, units)]
+    if not names:
+        return (f"{test}: " if test else "") + "; ".join(vals), True
+    if len(names) != len(values):           # never guess which value belongs to which parameter
+        return f"{test}: {len(values)} values for {len(names)} parameters, see the report", False
+    if len(vals) > 1 and len(set(vals)) == 1:
+        return f"{test}: all {len(vals)} parameters {vals[0]}", True
+    return f"{test}: " + "; ".join(f"{n} {v}" for n, v in zip(names, vals)), True
+
+
+def _two_table_layout(pdf) -> Optional[Tuple[List[str], List[str], List[str]]]:
+    """Return (header lines, rows, notes), or None when the report does not have this layout."""
+    overview: List[Tuple[str, str, str, str]] = []      # (lab key, lab id, reference cell, method)
+    results: dict = {}                                  # lab key -> [result texts]
+    shown: dict = {}                                    # lab key -> lab ID as the lab wrote it
+    notes: List[str] = []
+    kind, idx, width = None, {}, 0
+    for page in pdf.pages:
+        for table in page.extract_tables():
+            if not table or not table[0]:
+                continue
+            hdr = _header(table[0])
+            body = table[1:]
+            ref = _find(hdr, lambda h: "uwreferentie" in h)
+            res = _find(hdr, lambda h: h.startswith("resultaat"))
+            if ref is not None:
+                kind, width = "overview", len(hdr)
+                idx = {"ref": ref, "method": _find(hdr, lambda h: "analysemethode" in h)}
+            elif res is not None:
+                kind, width = "results", len(hdr)
+                unit = re.search(r"\(([^)]+)\)", table[0][res] or "")
+                idx = {"res": res, "param": _find(hdr, lambda h: "parameter" in h),
+                       "unit": _find(hdr, lambda h: h.startswith("eenheid")),
+                       "remark": _find(hdr, lambda h: h.startswith("opm")),
+                       "unit_text": unit.group(1) if unit else ""}
+            elif kind and len(hdr) == width:            # a table that runs on from the previous page
+                body = table
+            else:
+                kind = None                             # a legend or remarks table: not ours
+                continue
+            for row in body:
+                if not row or not _flat(row[0]):
+                    continue
+                if kind == "overview":
+                    m = idx["method"]
+                    method = ", ".join(ln.strip() for ln in _norm(row[m] if m is not None else "").split("\n")
+                                       if ln.strip() and not re.match(r"^\d{2}-\d{2}-\d{4}", ln.strip()))
+                    overview.append((_key(row[0]), _flat(row[0]), _norm(row[idx["ref"]]), method))
+                else:
+                    p = idx["param"]
+                    lines = [ln.strip() for ln in _norm(row[p]).split("\n") if ln.strip()] if p is not None else []
+                    test = next((ln for ln in lines if not ln.startswith("-")), "")
+                    names = [ln.lstrip("- ").strip() for ln in lines if ln.startswith("-")]
+                    values = [v.strip() for v in _norm(row[idx["res"]]).split("\n") if v.strip()]
+                    u = idx["unit"]
+                    units = ([x.strip() for x in _norm(row[u]).split("\n") if x.strip()] if u is not None
+                             else [idx["unit_text"]] * len(values))
+                    text, paired = _summary(test, names, values, units)
+                    r = idx["remark"]
+                    mark = _flat(row[r]) if r is not None else ""
+                    if mark and mark not in ("-", "--"):
+                        text += f" (lab remark {mark})"
+                        notes.append(f"Lab ID {_flat(row[0])} has remark {mark}: read the lab's explanation "
+                                     "before treating a '<' value as 'not present'.")
+                    if not paired:
+                        notes.append(f"Lab ID {_flat(row[0])}: values and parameters do not line up, check the report.")
+                    results.setdefault(_key(row[0]), []).append(text)
+                    shown.setdefault(_key(row[0]), _flat(row[0]))
+    if not overview:
+        return None
+
+    full = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    head: List[str] = []
+    m = re.search(r"Analyserapport:\s*(.+)", full)
+    if m:
+        head.append("Report: " + re.sub(r"\s*/\s*", "/", m.group(1).strip()))
+    m = re.search(r"Uw referentie\s*:\s*Project\s+(\S+)", full)
+    if m:
+        head.append("Project: " + m.group(1))
+    m = re.search(r"Datum rapportage\s*:\s*(.+)", full)
+    if m:
+        head.append("Date: " + m.group(1).strip())
+    m = re.search(r"vervangt document\s+([^,]+?)\s*,", full)
+    if m:
+        old = re.sub(r"\s*/\s*", "/", m.group(1).strip())
+        head.append("Replaces: " + old)
+        notes.append(f"This report replaces {old}. Results read from the older version are superseded.")
+    head.append("Columns: id | description | result | method | remarks")
+
+    rows: List[str] = []
+    used = set()
+    for key, lab_id, ref, method in overview:
+        words = ref.split()
+        code = words[0] if words else "-"
+        desc = re.sub(r"^Locatie\s*:?\s*", "", " ".join(words[1:]), flags=re.I)
+        found = results.get(key, [])
+        if found:
+            used.add(key)
+        else:
+            notes.append(f"No result found for {code} (lab ID {lab_id}).")
+        rows.append(" | ".join([code, desc, "; ".join(found), method, f"lab ID {lab_id}"]))
+    for key, found in results.items():
+        if key not in used:                 # a result we cannot tie to a sample code: never guess one
+            notes.append(f"A result has a lab ID that is not in the overview table ({shown[key]}). Link it by hand.")
+            rows.append(" | ".join(["-", "", "; ".join(found), "", f"lab ID {shown[key]}, not in overview"]))
+    return head, rows, notes
+
+
 def extract_lab_text(pdf_path: str) -> Extraction:
     methods, notes = [], []
     head: List[str] = []
@@ -176,6 +323,11 @@ def extract_lab_text(pdf_path: str) -> Extraction:
     cols = None
     with pdfplumber.open(pdf_path) as pdf:
         n = len(pdf.pages)
+        if all(len(p.extract_words()) >= 5 for p in pdf.pages):
+            found = _two_table_layout(pdf)
+            if found is not None:
+                head, rows, notes = found
+                return Extraction(text="\n".join(head + ["---"] + rows), method="text", pages=n, notes=notes)
         for page in pdf.pages:
             ws = page.extract_words()
             if len(ws) >= 5:
