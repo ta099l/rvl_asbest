@@ -14,7 +14,7 @@ STOP = {"the", "of", "at", "on", "in", "and", "a", "an", "with", "near", "side",
 DIGIT_PREFIXES = ("CR6", "CH6")
 # Older notations for the same test, mapped to RVL's standard prefix (Rolf, 6 Nov 2026).
 # A match through an alias is never "high": the inspector sees which notation was read.
-ALIASES = {"CH6": "CR6", "PAC": "PAH", "M": "MM"}
+ALIASES = {"CH6": "CR6", "PAC": "PAH", "M": "MM", "ZM": "HM"}   # ZM: zware metalen (Rolf: keep ZM recognisable)
 
 
 @dataclass

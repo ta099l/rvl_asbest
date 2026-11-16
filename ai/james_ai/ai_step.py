@@ -17,6 +17,7 @@ To get the exact prompt for the prompt lab, with its key for the replay file:
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -28,7 +29,9 @@ from .contract import check_request, no_links, validate_response
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = ROOT / "ai" / "prompts"
 OUTPUT_FORMAT = "_output_format.txt"
-DEFAULT_PROMPT = "v1_baseline"
+# The prompt version used when none is given. JAMES_PROMPT lets the app run another
+# version (for example JAMES_PROMPT=v2_rules) without changing app code.
+DEFAULT_PROMPT = os.environ.get("JAMES_PROMPT", "").strip() or "v1_baseline"
 
 
 class Client(Protocol):

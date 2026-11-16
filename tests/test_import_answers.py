@@ -23,7 +23,9 @@ class Workspace(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp)
         self.prompts = self.tmp / "prompts"
-        shutil.copytree(ROOT / "ai" / "prompts", self.prompts)
+        # only v1 and the answer format: the tests count versions from v1, whatever versions exist later
+        shutil.copytree(ROOT / "ai" / "prompts", self.prompts,
+                        ignore=lambda d, names: [n for n in names if not n.startswith(("v1_baseline", "_"))])
         for f in self.prompts.glob("*.note.md"):
             f.unlink()
         self.replays = self.tmp / "replays"

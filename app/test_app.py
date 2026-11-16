@@ -233,6 +233,30 @@ class FieldRegistration(unittest.TestCase):
             self.s.load_demo("b1")
 
 
+class RestartWithDatabaseFile(unittest.TestCase):
+    """--db keeps data between runs: a restart must not copy the demo ship, and switching to a
+    project whose report was read before the restart must still work."""
+
+    def test_restart_keeps_one_demo_ship_and_old_reports_open(self):
+        import os, tempfile
+        path = os.path.join(tempfile.mkdtemp(), "james.db")
+        s = Service(path)
+        s.new_project({"name": "Demo bridge", "project": "DEV-X", "site": "Demo site"})
+        s.add_sample({"code": "PAH-1", "location": "Pillar 4, bearing", "material": "Bitumen"}, "T. Test")
+        rid = s.ingest("Lab", "---\nPac-01 | Pillar 4 bearing bitumen | PAH < 0,1 mg/kg")
+        s.decide(rid, 0, "approve", "T. Test", None, "")
+        s.store.db.close()
+
+        s2 = Service(path)                                   # the app is started again
+        names = [o["name"] for o in s2.store.objects()]
+        self.assertEqual(names.count(names[0]), 1)            # still one demo ship
+        oid = next(o["id"] for o in s2.store.objects() if o["project"] == "DEV-X")
+        s2.select_object(oid)
+        v = s2.view(rid)                                      # read again, no crash
+        self.assertEqual(v["object"]["project"], "DEV-X")
+        self.assertEqual(v["report"]["rows"][0]["decision"]["state"], "approved")   # decision kept
+
+
 class IhmReading(unittest.TestCase):
     def one(self, result, method="", code=""):
         f = findings(result, method, code)
@@ -247,6 +271,22 @@ class IhmReading(unittest.TestCase):
     def test_substance_from_method_or_code_prefix(self):
         self.assertEqual(self.one("85 mg/kg", method="PCB (7 congeners)")["key"], "pcb")
         self.assertEqual(self.one("85 mg/kg", code="PBS-1")["key"], "pcb")
+
+    def test_a_named_unknown_substance_is_never_guessed_from_the_code(self):
+        # zinc on a CR6 sample must not be reported as chromium-6
+        f = findings("Lood (Pb) 95 mg/kg; Zink (Zn) 18000 mg/kg", code="CR6-2")
+        self.assertEqual([x["key"] for x in f], ["pb", None])
+        self.assertEqual(f[1]["name"], "Unknown substance")
+
+    def test_pah_is_read_but_never_listed_as_ihm_material(self):
+        f = self.one("Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg")
+        self.assertEqual((f["key"], f["status"], f["table"]), ("pah", "below", None))
+        f = self.one("PAK 85 mg/kg")
+        self.assertEqual((f["key"], f["status"]), ("pah", "unknown"))       # a value: the inspector decides
+
+    def test_dutch_names(self):
+        self.assertEqual(self.one("Chroom-6: <10 mg/kg")["key"], "cr6")
+        self.assertEqual(self.one("Lood (Pb) 150 mg/kg")["key"], "pb")
 
     def test_below_detection_limit(self):
         self.assertEqual(self.one("< 2 mg/kg (DL 2)", method="PCB")["status"], "below")

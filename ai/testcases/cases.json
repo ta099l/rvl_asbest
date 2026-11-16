@@ -229,6 +229,62 @@
         "material": "Voegvulling",
         "colour": "grijs"
       }
+    ],
+    "bridge_pah_codes": [
+      {
+        "code": "PAH-1",
+        "location": "Geluidsscherm noord, voeg tussen betonelementen",
+        "material": "Bitumen",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-2",
+        "location": "Pijler 4, oplegging",
+        "material": "Bitumen",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-3",
+        "location": "Pijler 4",
+        "material": "Zwarte laag",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-4",
+        "location": "Pijler 5, oplegging",
+        "material": "Bitumen",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-5",
+        "location": "Achterzijde geluidswal, voeg bij lichtmast 21",
+        "material": "Zwarte laag",
+        "colour": "zwart"
+      },
+      {
+        "code": "PAH-6",
+        "location": "Voetpad brugdek",
+        "material": "Zwarte laag",
+        "colour": "zwart, 1 laag"
+      },
+      {
+        "code": "PAH-7",
+        "location": "Landhoofd west, oplegging",
+        "material": "Zwarte laag",
+        "colour": "zwart, 2 lagen"
+      },
+      {
+        "code": "HM-1",
+        "location": "Pijler 4, oplegging",
+        "material": "Verflaag",
+        "colour": "zwart, oranje, 2 lagen"
+      },
+      {
+        "code": "CR6-1",
+        "location": "Pijler 4, oplegging",
+        "material": "Verflaag",
+        "colour": "zwart, oranje, 2 lagen"
+      }
     ]
   },
   "sets": {
@@ -246,6 +302,9 @@
     },
     "dev4": {
       "register": "structure_standard_codes"
+    },
+    "dev5": {
+      "register": "bridge_pah_codes"
     }
   },
   "cases": [
@@ -574,9 +633,9 @@
     {
       "id": "g5",
       "set": "dev4",
-      "tag": "unknown prefix ZM (ask Rolf)",
+      "tag": "old notation ZM for HM",
       "line": "ZM-03 | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
-      "truth": null
+      "truth": "HM-3"
     },
     {
       "id": "g6",
@@ -626,6 +685,76 @@
       "tag": "no ID, result decides",
       "line": "- | Pijler 2 oplegging. Kleur: zwart, oranje. Lagen: 2 | Elementen: Lood (Pb) 61000 mg/kg",
       "truth": "HM-3"
+    },
+    {
+      "id": "h1",
+      "set": "dev5",
+      "tag": "old notation",
+      "line": "Pac-01 | Geluidsscherm noord tussen betonelementen bitumen. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-1"
+    },
+    {
+      "id": "h2",
+      "set": "dev5",
+      "tag": "old notation, place shared with HM-1 and CR6-1",
+      "line": "Pac-02 | Pijler 4 oplegging bitumen. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-2"
+    },
+    {
+      "id": "h3",
+      "set": "dev5",
+      "tag": "old notation, place close to PAH-2",
+      "line": "Pac-03 | Op pijler 4. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-3"
+    },
+    {
+      "id": "h4",
+      "set": "dev5",
+      "tag": "old notation",
+      "line": "Pac-04 | Pijler 5 oplegging bitumen. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-4"
+    },
+    {
+      "id": "h5",
+      "set": "dev5",
+      "tag": "old notation, long place",
+      "line": "Pac-05 | Achterzijde geluidswal tussen betonelement bij lichtmast 21. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-5"
+    },
+    {
+      "id": "h6",
+      "set": "dev5",
+      "tag": "old notation, layers",
+      "line": "Pac-06 | Voetpad brug zwarte laag. Kleur: zwart. Lagen: 1 | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-6"
+    },
+    {
+      "id": "h7",
+      "set": "dev5",
+      "tag": "old notation, place partly written",
+      "line": "Pac-07 | Oplegging landhoofd. Kleur: zwart zwart. Lagen: 2 | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-7"
+    },
+    {
+      "id": "h8",
+      "set": "dev5",
+      "tag": "unknown ID",
+      "line": "Pac-08 | Pijler 5 voeg tussen betonelementen. Kleur: zwart | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": null
+    },
+    {
+      "id": "h9",
+      "set": "dev5",
+      "tag": "ID conflict (lab mix-up)",
+      "line": "Pac-06 | Oplegging landhoofd west. Kleur: zwart zwart. Lagen: 2 | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": null
+    },
+    {
+      "id": "h10",
+      "set": "dev5",
+      "tag": "no ID",
+      "line": "- | Voetpad brugdek zwarte laag. Kleur: zwart. Lagen: 1 | Bepaling Poly-aromatische koolwaterstoffen: all 16 parameters <0,1 mg/Kg",
+      "truth": "PAH-6"
     }
   ]
 }

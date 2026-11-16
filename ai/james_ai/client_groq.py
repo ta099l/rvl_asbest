@@ -72,7 +72,8 @@ class GroqClient:
             raise RuntimeError("GROQ_API_KEY is not set in the environment")
         self.model = model or os.environ.get("JAMES_GROQ_MODEL", DEFAULT_MODEL).strip()
         self.timeout = timeout if timeout is not None else float(os.environ.get("JAMES_GROQ_TIMEOUT", "45"))
-        self.prompt_version = prompt_version or os.environ.get("JAMES_GROQ_PROMPT_VERSION", "v1_baseline")
+        self.prompt_version = (prompt_version or os.environ.get("JAMES_GROQ_PROMPT_VERSION")
+                               or os.environ.get("JAMES_PROMPT") or "v1_baseline")
         self.max_completion_tokens = int(os.environ.get("JAMES_GROQ_MAX_COMPLETION_TOKENS", "4096"))
 
     def _send(self, request: urllib.request.Request) -> dict:

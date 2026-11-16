@@ -19,15 +19,19 @@ NAMES = {
     "tbt": r"\bTBT\b|organotin|tributyltin",
     "pfos": r"\bPFOS\b",
     "cd": r"\bCd\b|cadmium",
-    "cr6": r"Cr\s*\(?VI\)?|CrVI|Cr6|chrom\w*[- ]?6|hexavalent",
-    "pb": r"\bPb\b|\blead\b",
-    "hg": r"\bHg\b|mercury",
+    "cr6": r"Cr\s*\(?VI\)?|CrVI|Cr6|chroo?m\w*[- ]?6|hexavalent",          # Dutch: Chroom-6
+    "pb": r"\bPb\b|\blead\b|\blood\b",                       # Dutch: lood
+    "hg": r"\bHg\b|mercury|\bkwik\b",                      # Dutch: kwik
     "hbcdd": r"HBCDD?",
     "radio": r"radioactiv",
+    "pah": r"\bPAH\b|\bPAK\b|poly-?\s?aromati|polycyclic aromatic",   # not an IHM substance: no table
 }
 # Sample code prefixes RVL uses, as a hint when the result itself names no substance.
 PREFIX_HINT = {"M": "asbestos", "MM": "asbestos", "KM": "asbestos", "PBS": "pcb", "SS": "pcb", "OS": "pcb",
                "ODS": "ods", "PFOS": "pfos", "HBCDD": "hbcdd", "CH6": "cr6", "CR6": "cr6"}
+# A result that names its own substance, e.g. "Zink (Zn) 18000 mg/kg". When that substance is not in
+# NAMES, it must not be guessed from the method or the sample code: zinc is not chromium-6.
+NAMED_SUBSTANCE = re.compile(r"[A-Za-z]{3,}\s*\([A-Z][a-z]?\)")
 NOT_DETECTED = re.compile(r"not\s+detected|n\.?d\.?\b|none\s+detected|absent", re.I)
 DETECTED = re.compile(r"detected|present|positive", re.I)
 VALUE = re.compile(r"(<|≤|>|≥)?\s*(\d[\d.,]*)(?:\s*[–-]\s*(\d[\d.,]*))?\s*(%|mg/kg|ppm)", re.I)
@@ -41,7 +45,7 @@ SECTIONS_2_3 = [
     ("2.3.5", "HBCDD", ["hbcdd"]),
     ("2.3.6", "Heavy metals (Lead - Pb + Chromium - Cr + Cadmium - Cd)", ["pb", "cr6", "cd", "hg"]),
     ("2.3.7", "Radioactive Materials", ["radio"]),
-    ("2.3.x", "Other substances (not a section in the template)", ["tbt", None]),
+    ("2.3.x", "Other substances (not a section in the template)", ["tbt", "pah", None]),
 ]
 # The fixed lines of Table A (Table 15) and Table B (Table 16) in the RVL IHM template.
 # (label, table, substance keys, extra test on the source: None, "paint" or "battery")
@@ -115,9 +119,9 @@ def findings(result: str, method: str = "", code: str = "", table: Optional[Dict
     out: List[dict] = []
     for seg in [x.strip() for x in re.split(r";", result or "") if x.strip()]:
         keys = [k for k, rx in NAMES.items() if re.search(rx, seg, re.I)]
-        if not keys:
+        if not keys and not NAMED_SUBSTANCE.search(seg):
             keys = [k for k, rx in NAMES.items() if re.search(rx, method or "", re.I)][:1]
-        if not keys and _code_hint(code):
+        if not keys and _code_hint(code) and not NAMED_SUBSTANCE.search(seg):
             keys = [_code_hint(code)]
         if not keys:
             out.append({"key": None, "name": "Unknown substance", "table": None, "status": "unknown",
@@ -145,6 +149,8 @@ def _judge(key: str, seg: str, t: dict) -> dict:
         f.update(value=value, unit=unit)
         if sign in ("<", "≤"):
             f.update(status="below", note=f"below the detection limit ({seg})")
+        elif t["table"] is None:            # not in IHM Table A or B (e.g. PAH): never listed by the app
+            f.update(note="not in IHM Table A or B: the inspector decides how it is reported")
         elif t["threshold"] is None:
             f.update(status="above", note="no threshold: any detection is listed")
         elif unit != t["unit"]:

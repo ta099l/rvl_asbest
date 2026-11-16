@@ -233,6 +233,12 @@ class StandardCodesAndAliases(unittest.TestCase):
         self.assertEqual(p.status, "none")
         self.assertIn("row:0:unregistered", p.flags)
 
+    def test_zm_is_the_older_notation_for_heavy_metals(self):
+        reg = standard_register()
+        p = link("", reg, "---\nZM-01 | Railing paint, accommodation outside | Pb 300 mg/kg").proposals[0]
+        self.assertEqual((p.sample_id, p.confidence), ("HM-1", "medium"))
+        self.assertIn("older notation", p.reason)
+
     def test_alias_does_not_join_different_tests(self):
         # M is asbestos (MM), HM is heavy metals: M1 must not become HM-1.
         p = self.one("M1 | Railing paint, accommodation | Pb 300 mg/kg")

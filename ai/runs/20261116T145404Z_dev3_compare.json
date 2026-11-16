@@ -1,0 +1,265 @@
+{
+  "set": "dev3",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 10,
+  "ai_answered": 10,
+  "sent_to_ai": 6,
+  "counts": {
+    "rules": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 0
+    },
+    "ai": {
+      "correct": 8,
+      "wrong": 1,
+      "abstained_ok": 1,
+      "abstained_missed": 0
+    },
+    "hybrid": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "f1",
+      "tag": "clean",
+      "line": "MM-1 | Insulation wrap, engine room bulkhead | Chrysotile 15%",
+      "truth": "MM-1",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "MM-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "MM-1",
+        "reason": "Exact code and material match.",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "MM-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f2",
+      "tag": "no separator",
+      "line": "CR601 | Primer, hatch coaming cargo hold 2 | Cr(VI) 120 mg/kg",
+      "truth": "CR6-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-1",
+        "reason": "ID \"CR601\" normalised to CR6-1 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "CR6-1",
+        "reason": "matches location and primer material",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "CR6-1",
+        "reason": "Rules and AI agree on CR6-1. Rules: ID \"CR601\" normalised to CR6-1 (case, spaces, zero padding). Description agrees (100%). AI: matches location and primer material",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f3",
+      "tag": "old notation",
+      "line": "CH6-02 | Primer, hatch cover cargo hold 2 | Cr(VI) < 10 mg/kg",
+      "truth": "CR6-2",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "CR6-2",
+        "reason": "ID \"CH6-02\" uses CH6, an older notation for CR6: read as CR6-2. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "CR6-2",
+        "reason": "Matches location and primer description in register",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "CR6-2",
+        "reason": "Rules and AI agree on CR6-2. Rules: ID \"CH6-02\" uses CH6, an older notation for CR6: read as CR6-2. Description agrees (100%). AI: Matches location and primer description in register",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f4",
+      "tag": "old notation",
+      "line": "M2 | Gasket, boiler door | Chrysotile 40%",
+      "truth": "MM-2",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "MM-2",
+        "reason": "ID \"M2\" uses M, an older notation for MM: read as MM-2. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "MM-2",
+        "reason": "Lab ID M2 matches register entry MM-2 (boiler door gasket)",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "MM-2",
+        "reason": "Rules and AI agree on MM-2. Rules: ID \"M2\" uses M, an older notation for MM: read as MM-2. Description agrees (100%). AI: Lab ID M2 matches register entry MM-2 (boiler door gasket)",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f5",
+      "tag": "clean",
+      "line": "TBT-1 | Antifouling paint, hull below waterline | TBT 3200 mg/kg",
+      "truth": "TBT-1",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "TBT-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "TBT-1",
+        "reason": "Exact match of sample ID",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "TBT-1",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f6",
+      "tag": "old notation",
+      "line": "Pac-01 | Bituminous deck covering, deck 1 | PAH 85 mg/kg",
+      "truth": "PAH-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PAH-1",
+        "reason": "ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PAH-1",
+        "reason": "Material and location match register entry",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PAH-1",
+        "reason": "Rules and AI agree on PAH-1. Rules: ID \"Pac-01\" uses PAC, an older notation for PAH: read as PAH-1. Description agrees (100%). AI: Material and location match register entry",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f7",
+      "tag": "unknown ID",
+      "line": "TBT-2 | Antifouling paint, rudder | TBT 1500 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"TBT-2\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses TBT codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": null,
+        "reason": "No matching register sample for TBT-2 (rudder antifouling paint)",
+        "outcome": "abstained_ok"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"TBT-2\" is not in the sample register. No sample in the register fits the description well enough. No link proposed. The register uses TBT codes, so this looks like a sample that was not registered.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "f8",
+      "tag": "prefix conflict",
+      "line": "CR6-1 | Railing paint, accommodation outside | Cr(VI) 40 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID says CR6-1 but the description matches HM-1 (100%) and CR6-1 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "HM-1",
+        "reason": "Description matches HM-1 entry for railing paint in accommodation",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID says CR6-1 but the description matches HM-1 (100%) and CR6-1 only 0%. Conflicting evidence, so no link is proposed.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "f9",
+      "tag": "lab's own code",
+      "line": "NL-2291 | Cable sheath, main switchboard engine room | PCB 30 mg/kg",
+      "truth": "PBS-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PBS-1",
+        "reason": "ID \"NL-2291\" is not in the sample register. Matched on description only: PBS-1 (100%, next best 33%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PBS-1",
+        "reason": "Matches cable sheath location in register",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PBS-1",
+        "reason": "Rules and AI agree on PBS-1. Rules: ID \"NL-2291\" is not in the sample register. Matched on description only: PBS-1 (100%, next best 33%). Low confidence, inspector must confirm. AI: Matches cable sheath location in register",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "f10",
+      "tag": "no ID",
+      "line": "- | Dust, ventilation grille cabin 214 | Asbestos not detected",
+      "truth": "KM-1",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "KM-1",
+        "reason": "No ID on this lab line. Matched on description only: KM-1 (100%, next best 0%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "KM-1",
+        "reason": "Matches location and material in register",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "KM-1",
+        "reason": "Rules and AI agree on KM-1. Rules: No ID on this lab line. Matched on description only: KM-1 (100%, next best 0%). Low confidence, inspector must confirm. AI: Matches location and material in register",
+        "outcome": "correct"
+      }
+    }
+  ],
+  "replay": null,
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
+  "run_at": "2026-11-16T14:54:04+00:00",
+  "commit": "b4b99a6+changes"
+}

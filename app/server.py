@@ -91,9 +91,12 @@ class Service:
             if getattr(self, "store", None) is not None:
                 self.store.db.close()
             self.store = Store(self.db_path if self.db_path != ":memory:" else ":memory:")
-            self.object_id = self.store.add_object(SHIP["name"], SHIP["kind"], SHIP["ref"], SHIP["site"],
-                                                   SHIP["project"], SHIP["samples"], SHIP.get("survey_date", ""),
-                                                   SHIP.get("info"))
+            # A database file (--db) keeps the demo ship between runs: reuse it instead of adding a copy each start.
+            known = next((o["id"] for o in self.store.objects()
+                          if (o["name"], o["ref"], o["project"]) == (SHIP["name"], SHIP["ref"], SHIP["project"])), None)
+            self.object_id = known or self.store.add_object(SHIP["name"], SHIP["kind"], SHIP["ref"], SHIP["site"],
+                                                            SHIP["project"], SHIP["samples"], SHIP.get("survey_date", ""),
+                                                            SHIP.get("info"))
             self.demo_object = self.object_id
             self.runs: Dict[int, HybridRun] = {}
             self.read_at: Dict[int, str] = {}                 # report id -> when the agent last read it
@@ -107,7 +110,8 @@ class Service:
                 self.client = GroqClient()
             else:
                 raise RuntimeError("JAMES_AI_PROVIDER must be 'replay' or 'groq'")
-            self.load_demo("b1")
+            if known is None:
+                self.load_demo("b1")
 
     def log(self, report_id: int, text: str) -> None:
         self.agent_log.append({"at": now(), "report_id": report_id, "by": "Agent", "text": text})
@@ -182,6 +186,21 @@ class Service:
         for i, p in enumerate(run.response["proposals"]):
             if p["sample"] is None:
                 self.log(rid, f"Line {i + 1} ({req['rows'][i]['raw_id'] or 'no ID'}): no link found.")
+
+    def is_practice(self, rid: int) -> bool:
+        """A practice report is remembered in memory; after a restart its label still marks it."""
+        if rid in self.practice:
+            return True
+        rep = self.store.db.execute("SELECT label FROM lab_report WHERE id=?", (rid,)).fetchone()
+        return bool(rep) and rep["label"].startswith("Practice review")
+
+    def run_for(self, rid: int) -> HybridRun:
+        """The agent's proposals for a report. They live in memory only, so after a restart of the app
+        the report is read again; the inspector's decisions are in the database and stay."""
+        if rid not in self.runs:
+            self.read(rid)
+            self.log(rid, "Read again because the app was restarted (proposals are not stored).")
+        return self.runs[rid]
 
     def reread(self, rid: int) -> None:
         """Read a report again with the current field registration (rules and AI)."""
@@ -266,9 +285,9 @@ class Service:
             by = (by or "").strip()
             if not by:
                 raise ValueError("enter the inspector name first: every decision is signed")
-            run = self.runs.get(rid)
-            if run is None:
+            if self.store.db.execute("SELECT 1 FROM lab_report WHERE id=?", (rid,)).fetchone() is None:
                 raise ValueError("unknown report")
+            run = self.run_for(rid)
             if self.store.signoff(rid):
                 raise ValueError("this report is signed: decisions can no longer change")
             prop = run.response["proposals"][idx]
@@ -296,7 +315,7 @@ class Service:
 
     def sign(self, rid: int, by: str) -> None:
         with self.lock:
-            if rid in self.practice:
+            if self.is_practice(rid):
                 raise ValueError("a practice report cannot be signed")
             if self.store.signoff(rid):
                 raise ValueError("this report is already signed")
@@ -307,9 +326,9 @@ class Service:
     def export(self, rid: int):
         """The report filled into RVL's IHM template: (bytes, file name). Practice reports are refused."""
         with self.lock:
-            if rid not in self.runs:
+            if self.store.db.execute("SELECT 1 FROM lab_report WHERE id=?", (rid,)).fetchone() is None:
                 raise ValueError("unknown report")
-            if rid in self.practice:
+            if self.is_practice(rid):
                 raise ValueError("a practice report cannot be exported")
             view = self.report_view(rid, self.store.register(self.object_id))
             data = export_odt.export(view)
@@ -321,7 +340,7 @@ class Service:
         with self.lock:
             if not (by or "").strip():
                 raise ValueError("enter the inspector name first")
-            if rid in self.practice:
+            if self.is_practice(rid):
                 raise ValueError("a practice report never goes into the ship's history")
             v = self.store.save_asset_version(self.object_id, rid, by.strip())
             return v
@@ -333,7 +352,7 @@ class Service:
                 "SELECT id,label,report_ref,lab,ingested_at FROM lab_report WHERE object_id=? ORDER BY id",
                 (self.object_id,))]
             for r in reports:
-                r["practice"] = r["id"] in self.practice
+                r["practice"] = self.is_practice(r["id"])
             obj = dict(self.store.object(self.object_id))
             obj["demo"] = self.object_id == self.demo_object
             reg = self.store.register(self.object_id)
@@ -354,12 +373,12 @@ class Service:
                    "thresholds_note": "Thresholds: to confirm by RVL (app/thresholds.json)."}
             if not reports:
                 return out
-            rid = rid if rid in self.runs and rid in [r["id"] for r in reports] else reports[-1]["id"]
+            rid = rid if rid in [r["id"] for r in reports] else reports[-1]["id"]
             out["report"] = self.report_view(rid, reg)
             return out
 
     def report_view(self, rid: int, reg) -> dict:
-        run = self.runs[rid]
+        run = self.run_for(rid)
         reg_by = {s.id: s for s in reg}
         rep = self.store.db.execute("SELECT * FROM lab_report WHERE id=?", (rid,)).fetchone()
         decisions = self.store.current_decisions(rid)
@@ -441,7 +460,7 @@ class Service:
         return {"id": rid, "label": rep["label"], "ref": rep["report_ref"], "lab": rep["lab"],
                 "evidence": evidence,
                 "stale": bool(changed and changed > self.read_at.get(rid, rep["ingested_at"])) and not signed,
-                "practice": rid in self.practice, "practice_score": self.practice_score(rid),
+                "practice": self.is_practice(rid), "practice_score": self.practice_score(rid),
                 "rows": rows, "counts": counts, "flags": flags, "ai_note": ai_note,
                 "ihm": report, "open_items": open_items, "signed": signed, "timing": timing, "audit": audit}
 

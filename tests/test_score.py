@@ -44,10 +44,10 @@ class ScoreSet(unittest.TestCase):
 
     def test_real_cases_file_loads_with_every_set(self):
         data = load_cases()
-        for name in ("dev", "dev2", "dev3", "dev4"):
+        for name in ("dev", "dev2", "dev3", "dev4", "dev5"):
             r = score_set(data, name)
             self.assertEqual(sum(r["counts"].values()), r["lines"])
-        self.assertEqual(set(data["sets"]), {"dev", "dev2", "dev3", "dev4", "hold"})
+        self.assertEqual(set(data["sets"]), {"dev", "dev2", "dev3", "dev4", "dev5", "hold"})
 
 
 class DevSetsStaySafe(unittest.TestCase):

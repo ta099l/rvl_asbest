@@ -174,3 +174,26 @@ None on the contract: the app already sends one register per request, which will
 - **Effect:** dev4 rules 7 / 1 / 3 / 1. The wrong link is g9: code `CR6-2` exists and the place fits, but the result is a heavy-metals panel; the rules do not read the result.
 - **First AI run (14 Nov, Groq `openai/gpt-oss-20b`, prompt v1):** AI only 7 / 4 / 1 / 0, hybrid 6 / 2 / 2 / 2, worse than the rules alone. The hybrid's extra wrong link is g6 (`PCB-01` → SS-1, only the AI proposed it); g2 became no link because rules and AI disagreed. The AI did solve g12 by reading the result, but the hybrid keeps that line from the AI. Two of the AI's four wrong links (g5, g6) depend on the provisional answers above.
 - **Agreed by:** Tasnim (owner of `ai/`).
+
+## 2026-11-16: ZM is the older notation for HM; full RVL code list in prompt v3
+
+- **What:** the alias table in `ai/james_ai/linker.py` maps `ZM` → `HM` (like `CH6` → `CR6`, `PAC` → `PAH`, `M` → `MM`): a match through it is at most medium confidence and the reason names the older notation. dev4 case g5 (`ZM-03`) now has reference HM-3 instead of the provisional "no link". Prompt v3 (not yet measured) gets `ZM = HM` and the full list of RVL test prefixes.
+- **Why:** RVL's sample code list (IHM template and Rolf's note) says existing codes such as CH6-01, ZM-01 and Pac-01 must remain recognisable; ZM stands for *zware metalen* (heavy metals). The full code list: MM, KM, PBS, SS, OS, ODS, PFOS, HBCDD, HM (template key) and TBT, PAH, PFAS, CR6, NORM, TPH, VOC (additional codes), plus VI, DR, EI for observations without a lab sample.
+- **Effect:** dev4 rules 8 / 1 / 2 / 1 (was 7 / 1 / 3 / 1 with the old reference for g5).
+- **Still open (Rolf):** `PCB-01` on a lab line is not an RVL code (PCB is PBS, SS or OS); g6 stays "no link". `M00` and `V00` are "to check" in RVL's list (`M` is already read as `MM`; `V` is not mapped).
+- **Agreed by:** Tasnim (owner of `ai/`), based on Rolf's code list.
+
+## 2026-11-16: Fixes in `app/` (made at Tasnim's request, for Ivan to review)
+
+Found while testing the full flow with the fictional set dev5 (upload, approve, export).
+- **Decided lines fold away** (`app/static/index.html`): after Approve, Link here or Reject the buttons disappear and the card shows who decided what. "Change decision" brings them back; the new decision is added to the log, the old one stays (append-only).
+- **Cover page filled** (`app/export_odt.py`): the cover table had labels with empty cells and no placeholders; project number, location, survey period, client and internal authorisation ("Draft: not yet authorised" until signed) are now written in.
+- **Header and footer filled**: `<26>`, `<Vessel>` and `<Type>` sit in `styles.xml`, which was not filled before.
+- **Section 2.3.8 "Other substances"**: the template has no section for PAH, TBT and other substances outside 2.3.1–2.3.7, so approved PAH results disappeared from the report. When such results exist, section 2.3.7 is copied once as 2.3.8 (bookmarks dropped, table names made unique). Question for Rolf: where should PAH go in an RVL report?
+- **Zinc is no longer reported as chromium-6** (`app/ihm.py`): a result that names its own substance with a symbol ("Zink (Zn)") that James does not know becomes "Unknown substance, inspector classifies", instead of taking the substance from the sample code. Dutch names Lood, Chroom-6 and Kwik are recognised.
+- **Not changed, for RVL:** the template's placeholder cover photo, the PCB health text that stops at "include damage to", and the ship wording ("Vessel", "on board") for structures. These are in RVL's template, not in the code.
+- **Restart with a database file** (`app/server.py`): with `--db`, every start added another copy of the demo ship, and switching to a project whose report was read before the restart crashed (proposals are kept in memory only). Now the existing demo ship is reused, and a report without proposals in memory is read again when opened (`run_for`); the inspector's decisions are in the database and stay. A practice report is also recognised by its label after a restart, so it can still never be signed, exported or saved to the history.
+- **Project summary** (`app/export_odt.py`): a paragraph under 'Summary' and the 'Survey Findings' line are written from the project's own data: object, project number, survey location and period, how many lab lines were approved, rejected or still open, and per substance which samples were above, below or still to classify. Only facts from the app; RVL's standard summary text follows unchanged.
+- **PAH (PAK) recognised** (`app/ihm.py`, `app/thresholds.json`): read from the result instead of 'Unknown substance', reported in 2.3.8. PAH is not in IHM Table A or B, so the app never lists it in Part I or the tables: below the detection limit is reported as such, a measured value is left to the inspector. To confirm by RVL.
+- **Tests:** app 59 (was 55), tests 153; all pass.
+- **Agreed by:** Tasnim (asked for the changes). Ivan: to review.

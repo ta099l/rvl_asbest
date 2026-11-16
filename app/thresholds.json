@@ -89,6 +89,14 @@
       "threshold": null,
       "unit": "",
       "detected_counts": true
+    },
+    {
+      "key": "pah",
+      "name": "Polycyclic aromatic hydrocarbons (PAH)",
+      "table": null,
+      "threshold": null,
+      "unit": "mg/kg",
+      "detected_counts": false
     }
   ],
   "_conflicts": [

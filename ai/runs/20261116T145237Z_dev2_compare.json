@@ -1,0 +1,288 @@
+{
+  "set": "dev2",
+  "variant": "compare",
+  "prompt": "v1_baseline",
+  "lines": 11,
+  "ai_answered": 11,
+  "sent_to_ai": 4,
+  "counts": {
+    "rules": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 1
+    },
+    "ai": {
+      "correct": 9,
+      "wrong": 2,
+      "abstained_ok": 0,
+      "abstained_missed": 0
+    },
+    "hybrid": {
+      "correct": 8,
+      "wrong": 0,
+      "abstained_ok": 2,
+      "abstained_missed": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "e1",
+      "tag": "clean",
+      "line": "M01 | Insulation wrap, engine room | Chrysotile 12%",
+      "truth": "M01",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "M01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "M01",
+        "reason": "Exact match of sample ID and material",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "M01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e2",
+      "tag": "prefix",
+      "line": "HM12 | Red-brown paint, cargo hold 1 | Pb 640 mg/kg",
+      "truth": "HM12",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "HM12",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "HM12",
+        "reason": "Exact match of sample code and paint description.",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "HM12",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e3",
+      "tag": "prefix conflict",
+      "line": "M12 | Red-brown paint, cargo hold 1, heavy metals | Pb 640 mg/kg",
+      "truth": "HM12",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID says M12 but the description fits HM12 better (100% against 75%). M12 and HM12 differ only by prefix, which marks a different test, so no link is proposed. Ask the lab which test this is.",
+        "outcome": "abstained_missed"
+      },
+      "ai": {
+        "sample": "HM12",
+        "reason": "matches heavy metals paint sample in cargo hold 1",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID says M12 but the description fits HM12 better (100% against 75%). M12 and HM12 differ only by prefix, which marks a different test, so no link is proposed. Ask the lab which test this is.",
+        "outcome": "abstained_missed"
+      }
+    },
+    {
+      "id": "e4",
+      "tag": "missing zero",
+      "line": "PBS1 | Cable sheath, corridor deck 2 | PCB 12 mg/kg",
+      "truth": "PBS01",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PBS01",
+        "reason": "ID \"PBS1\" normalised to PBS01 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PBS01",
+        "reason": "Matches cable sheath location and material",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PBS01",
+        "reason": "Rules and AI agree on PBS01. Rules: ID \"PBS1\" normalised to PBS01 (case, spaces, zero padding). Description agrees (100%). AI: Matches cable sheath location and material",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e5",
+      "tag": "spacing",
+      "line": "PBS 03 | Cable, main switchboard engine room | PCB < 5 mg/kg",
+      "truth": "PBS03",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "PBS03",
+        "reason": "ID \"PBS 03\" normalised to PBS03 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "PBS03",
+        "reason": "Lab ID matches register code and location",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "PBS03",
+        "reason": "Rules and AI agree on PBS03. Rules: ID \"PBS 03\" normalised to PBS03 (case, spaces, zero padding). Description agrees (100%). AI: Lab ID matches register code and location",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e6",
+      "tag": "clean",
+      "line": "KM01 | Dust, vent grille cabin 214 | Asbestos not detected",
+      "truth": "KM01",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "KM01",
+        "reason": "ID matches register exactly. Description agrees (80%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "KM01",
+        "reason": "Exact match of sample ID and description",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "KM01",
+        "reason": "ID matches register exactly. Description agrees (80%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e7",
+      "tag": "unknown ID",
+      "line": "OS02 | Hydraulic oil, steering gear | PCB < 1 mg/kg",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"OS02\" is not in the sample register. The register uses OS codes, so this looks like a sample that was not registered. The description fits OS01 (100%), but the ID and the description disagree, so no link is proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "OS01",
+        "reason": "The lab description matches the OS01 hydraulic oil sample in the steering gear room.",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"OS02\" is not in the sample register. The register uses OS codes, so this looks like a sample that was not registered. The description fits OS01 (100%), but the ID and the description disagree, so no link is proposed.",
+        "outcome": "abstained_ok"
+      }
+    },
+    {
+      "id": "e8",
+      "tag": "no ID",
+      "line": "- | Foam pipe insulation, pump room | ODS not detected",
+      "truth": "ODS01",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "ODS01",
+        "reason": "No ID on this lab line. Matched on description only: ODS01 (100%, next best 40%). Low confidence, inspector must confirm.",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "ODS01",
+        "reason": "Matches pump room foam insulation sample ODS01",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "ODS01",
+        "reason": "Rules and AI agree on ODS01. Rules: No ID on this lab line. Matched on description only: ODS01 (100%, next best 40%). Low confidence, inspector must confirm. AI: Matches pump room foam insulation sample ODS01",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e9",
+      "tag": "missing zero",
+      "line": "ODS1 | Insulation foam round pipes, pump room | CFC-11 detected",
+      "truth": "ODS01",
+      "ai_answered": true,
+      "sent_to_ai": true,
+      "rules": {
+        "sample": "ODS01",
+        "reason": "ID \"ODS1\" normalised to ODS01 (case, spaces, zero padding). Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "ODS01",
+        "reason": "Lab ID matches register code with missing zero",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "ODS01",
+        "reason": "Rules and AI agree on ODS01. Rules: ID \"ODS1\" normalised to ODS01 (case, spaces, zero padding). Description agrees (100%). AI: Lab ID matches register code with missing zero",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e10",
+      "tag": "clean",
+      "line": "SS01 | Swipe sample, transformer casing | PCB 8 ug/100cm2",
+      "truth": "SS01",
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": "SS01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      },
+      "ai": {
+        "sample": "SS01",
+        "reason": "Exact match on sample ID",
+        "outcome": "correct"
+      },
+      "hybrid": {
+        "sample": "SS01",
+        "reason": "ID matches register exactly. Description agrees (100%).",
+        "outcome": "correct"
+      }
+    },
+    {
+      "id": "e11",
+      "tag": "unknown ID",
+      "line": "M3 | Gasket, boiler door | Chrysotile 40%",
+      "truth": null,
+      "ai_answered": true,
+      "sent_to_ai": false,
+      "rules": {
+        "sample": null,
+        "reason": "ID \"M3\" is not in the sample register. The register uses M codes, so this looks like a sample that was not registered. The description fits M02 (100%), but the ID and the description disagree, so no link is proposed.",
+        "outcome": "abstained_ok"
+      },
+      "ai": {
+        "sample": "M02",
+        "reason": "Gasket from boiler door matches M02",
+        "outcome": "wrong"
+      },
+      "hybrid": {
+        "sample": null,
+        "reason": "ID \"M3\" is not in the sample register. The register uses M codes, so this looks like a sample that was not registered. The description fits M02 (100%), but the ID and the description disagree, so no link is proposed.",
+        "outcome": "abstained_ok"
+      }
+    }
+  ],
+  "replay": null,
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
+  "run_at": "2026-11-16T14:52:37+00:00",
+  "commit": "b4b99a6+changes"
+}

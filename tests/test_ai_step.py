@@ -135,5 +135,24 @@ class BadOutputBecomesNoLink(unittest.TestCase):
             assert_all_no_link(self, run, "no recorded answer")
 
 
+class PromptVersionSetting(unittest.TestCase):
+    """JAMES_PROMPT picks the prompt the app uses; without it v1 stays the default."""
+
+    def default_in_fresh_python(self, value):
+        import os, subprocess, sys
+        env = {k: v for k, v in os.environ.items() if k != "JAMES_PROMPT"}
+        if value is not None:
+            env["JAMES_PROMPT"] = value
+        out = subprocess.run([sys.executable, "-c", "from ai.james_ai.ai_step import DEFAULT_PROMPT;"
+                              "print(DEFAULT_PROMPT)"], env=env, capture_output=True, text=True, check=True)
+        return out.stdout.strip()
+
+    def test_v1_without_the_setting(self):
+        self.assertEqual(self.default_in_fresh_python(None), "v1_baseline")
+
+    def test_setting_chooses_the_version(self):
+        self.assertEqual(self.default_in_fresh_python("v2_rules"), "v2_rules")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -102,21 +102,27 @@ class TwoTableLayout(unittest.TestCase):
         self.assertTrue(any("remark C" in n for n in ex.notes))
 
 
-class Dev4AsPdf(unittest.TestCase):
-    """The dev4 PDF for the app must read back as exactly the dev4 lines, so a test in the
+class TestSetsAsPdf(unittest.TestCase):
+    """A test set's PDF for the app must read back as exactly its lines, so a test in the
     app and a scored run see the same input."""
 
-    def test_extractor_reads_back_every_dev4_line(self):
+    def read_back(self, set_name, project):
         from ai.james_ai.make_lab_pdf import make_lab_pdf
         from ai.james_ai.score import load_cases
-        lines = [c["line"] for c in load_cases()["cases"] if c["set"] == "dev4"]
-        path = os.path.join(tempfile.mkdtemp(), "dev4.pdf")
-        make_lab_pdf(path, lines, "DEV-4", "TEST/DEV4/v1.0")
-        ex = extract_lab_text(path)
-        head, rows = parse_report(ex.text)
-        self.assertEqual(head["project"], "DEV-4")
+        lines = [c["line"] for c in load_cases()["cases"] if c["set"] == set_name]
+        path = os.path.join(tempfile.mkdtemp(), f"{set_name}.pdf")
+        make_lab_pdf(path, lines, project, f"TEST/{set_name}/v1.0")
+        head, rows = parse_report(extract_lab_text(path).text)
+        self.assertEqual(head["project"], project)
         want = [[p.strip() for p in ln.split("|", 2)] for ln in lines]
         self.assertEqual([[r.raw_id, r.desc, r.result] for r in rows], want)
+
+    def test_extractor_reads_back_every_dev4_line(self):
+        self.read_back("dev4", "DEV-4")
+
+    def test_extractor_reads_back_dev5_with_one_line_per_parameter(self):
+        # dev5 prints all 16 PAH parameters on their own lines, like a real lab table
+        self.read_back("dev5", "DEV-5")
 
 
 if __name__ == "__main__":

@@ -160,6 +160,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let S = null;             // last state from the server
 let inspector = "";       // the name that signs every decision
+const reopened = new Set();  // decided lines whose buttons are shown again ("Change decision")
 let currentReport = null;
 
 async function api(path, body) {
@@ -451,7 +452,8 @@ function prop(x, flags) {
     ${finds}
     ${checks}
     ${signed}
-    ${locked ? "" : `<div class="act">
+    ${!locked && d && !reopened.has(x.idx) ? `<div class="act"><button data-reopen="1">Change decision</button></div>` : ""}
+    ${locked || (d && !reopened.has(x.idx)) ? "" : `<div class="act">
       <button class="approve" data-act="approve" ${p.sample ? "" : "disabled"}>Approve</button>
       <select class="pick-sample"><option value="">link to another sample…</option>${opts}</select>
       <button data-act="correct">Link here</button>
@@ -482,10 +484,13 @@ function wire() {
   const sg = $("#sign"); if (sg) sg.onclick = () => { if (needName()) return; post("/api/sign", { report_id: currentReport, by: inspector }); };
   const sh = $("#save-history"); if (sh) sh.onclick = () => { if (needName()) return; post("/api/save-history", { report_id: currentReport, by: inspector }); };
   document.querySelectorAll(".prop").forEach(box => {
+    const ro = box.querySelector("[data-reopen]");
+    if (ro) ro.onclick = () => { reopened.add(Number(box.dataset.idx)); render(); };
     box.querySelectorAll("[data-act]").forEach(btn => btn.onclick = () => {
       if (needName()) return;
       const act = btn.dataset.act, sample = box.querySelector(".pick-sample").value, note = box.querySelector(".note").value;
       if (act === "correct" && !sample) return toast("Choose the sample to link to first.");
+      reopened.delete(Number(box.dataset.idx));
       post("/api/decide", { report_id: currentReport, idx: Number(box.dataset.idx), action: act, by: inspector, sample, note });
     });
   });
