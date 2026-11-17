@@ -113,31 +113,50 @@ class Auth:
 
 LOGIN_PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>James · Log in</title>
+<meta name="color-scheme" content="light dark"><title>James · Log in</title>
 <style>
-  body{margin:0;background:#f3f4f0;color:#1b2a22;font:15px/1.5 "Segoe UI",system-ui,Arial,sans-serif;display:grid;place-items:center;min-height:100vh}
-  main{background:#fff;border:1px solid #dde2da;border-radius:12px;padding:28px;width:min(380px,92vw)}
-  h1{font:600 26px Georgia,serif;color:#1f3d2e;margin:0 0 4px}
-  p{color:#5f6b64;margin:0 0 16px;font-size:14px}
-  label{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#5f6b64;margin-top:12px}
-  input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #dde2da;border-radius:6px;font:inherit;margin-top:4px}
-  button{margin-top:18px;width:100%;padding:10px;border:0;border-radius:8px;background:#1f3d2e;color:#fff;font:inherit;cursor:pointer}
-  .note{margin-top:14px;font-size:12.5px;color:#7a3a0c;background:#fbeee3;border-radius:8px;padding:8px 10px}
-  #err{color:#a8321c;margin-top:10px;min-height:1.2em;font-size:14px}
+  :root{--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--bg:#f6f7f5;--surface:#fff;
+    --border:#e3e6e1;--border-strong:#cdd2cb;--text:#18201b;--text-2:#56605a;--text-3:#848c86;--brand:#1f5a43;--brand-hover:#174835;
+    --on-brand:#fff;--bad:#b2321d;--warn:#8f5c00;--warn-soft:#fbf1d9}
+  @media (prefers-color-scheme:dark){:root{--bg:#101211;--surface:#171a18;--border:#282d2a;--border-strong:#39403b;--text:#e7ebe8;
+    --text-2:#a2aaa5;--text-3:#78807b;--brand:#53b38a;--brand-hover:#66c49b;--on-brand:#07130d;--bad:#f0806b;--warn:#e0a842;--warn-soft:#33291a}}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--text);font:14px/1.5 var(--font)}
+  main{width:min(380px,100%);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:16px;margin-bottom:24px}
+  .mark{width:28px;height:28px;border-radius:6px;background:var(--brand);color:var(--on-brand);display:grid;place-items:center;font-weight:700}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px}
+  p{color:var(--text-2);margin:0 0 20px;font-size:13px}
+  label{display:grid;gap:4px;font-size:13px;font-weight:500;color:var(--text-2);margin-top:14px}
+  input{width:100%;height:36px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:6px;font:inherit;color:var(--text);background:var(--surface)}
+  input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 30%,transparent)}
+  button{margin-top:20px;width:100%;height:36px;border:1px solid var(--brand);border-radius:6px;background:var(--brand);color:var(--on-brand);font:500 14px var(--font);cursor:pointer}
+  button:hover{background:var(--brand-hover)}
+  button:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 30%,transparent)}
+  button:disabled{opacity:.6;cursor:wait}
+  .note{margin-top:20px;font-size:12px;color:var(--text-2);border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:6px;padding:8px 10px}
+  #err{color:var(--bad);margin-top:10px;min-height:1.2em;font-size:13px}
 </style></head><body><main>
-<h1>James</h1><p>Lab agent prototype. Log in with the name and password you got from the team.</p>
-<form id="f"><label>Name<input id="n" autocomplete="username" autofocus></label>
-<label>Password<input id="p" type="password" autocomplete="current-password"></label>
-<button>Log in</button><div id="err"></div></form>
+<div class="brand"><span class="mark" aria-hidden="true">J</span>James</div>
+<h1>Log in</h1><p>Lab agent prototype. Use the name and password you got from the team.</p>
+<form id="f"><label>Name<input id="n" autocomplete="username" autofocus required></label>
+<label>Password<input id="p" type="password" autocomplete="current-password" required></label>
+<button id="b">Log in</button><div id="err" role="alert"></div></form>
 <div class="note">Concept prototype. Fictitious data only: do not upload real RVL documents here.</div>
 </main><script>
 document.getElementById("f").onsubmit = async (e) => {
   e.preventDefault();
-  const res = await fetch("/api/login", {method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({name: document.getElementById("n").value, password: document.getElementById("p").value})});
-  if (res.ok) { location.href = "/"; return; }
-  const d = await res.json().catch(() => ({}));
-  document.getElementById("err").textContent = d.error || "Log in failed.";
+  const b = document.getElementById("b"); b.disabled = true; b.textContent = "Logging in…";
+  try {
+    const res = await fetch("/api/login", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name: document.getElementById("n").value, password: document.getElementById("p").value})});
+    if (res.ok) { location.href = "/"; return; }
+    const d = await res.json().catch(() => ({}));
+    document.getElementById("err").textContent = d.error || "Log in failed.";
+  } catch (err) {
+    document.getElementById("err").textContent = "The server could not be reached.";
+  }
+  b.disabled = false; b.textContent = "Log in";
 };
 </script></body></html>
 """

@@ -3,158 +3,369 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>James · Lab agent</title>
 <style>
+  /* ---------- Design tokens ---------- */
   :root {
-    --ink:#1b2a22; --muted:#5f6b64; --line:#dde2da; --bg:#f3f4f0; --card:#fff;
-    --green:#1f3d2e; --green-2:#2f6b4b; --accent:#d2631c; --accent-bg:#fbeee3;
-    --ok:#2b7a4f; --ok-bg:#e6f3ec; --warn:#a96a00; --warn-bg:#fbf0d6; --none:#6b7280; --none-bg:#eceeea;
-    --bad:#a8321c; --bad-bg:#f8e4de; --demo:#6b4fa0; --demo-bg:#efeaf7;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --bg: #f6f7f5;            --surface: #ffffff;       --surface-2: #f1f3f0;
+    --border: #e3e6e1;        --border-strong: #cdd2cb;
+    --text: #18201b;          --text-2: #56605a;        --text-3: #848c86;
+    --brand: #1f5a43;         --brand-hover: #174835;   --brand-soft: #e7f1eb;  --on-brand: #ffffff;
+    --ok: #1d7347;            --ok-soft: #e5f3ea;
+    --warn: #8f5c00;          --warn-soft: #fbf1d9;
+    --bad: #b2321d;           --bad-soft: #fbe8e3;
+    --info: #57469a;          --info-soft: #eeebf8;
+    --neutral-soft: #eceeeb;
+    --focus: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent);
+    --shadow-pop: 0 10px 30px rgba(16, 24, 20, .14), 0 1px 3px rgba(16, 24, 20, .08);
+
+    --r-sm: 6px;  --r-md: 8px;
+    --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 22px;
   }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "Segoe UI",system-ui,-apple-system,Arial,sans-serif; }
-  .wrap { max-width:1280px; margin:0 auto; padding:20px 24px 80px; }
-  .banner { background:var(--accent-bg); border:1px solid #f0cfb3; color:#7a3a0c; padding:10px 14px; border-radius:8px; font-size:14px; }
-  .banner b { color:var(--accent); }
-  .banner.practice { background:var(--demo-bg); border-color:#d4c8ea; color:#3d2a63; margin-top:12px; }
-  .banner.practice b { color:var(--demo); }
-  h1,h2,h3 { font-family:Georgia,"Times New Roman",serif; margin:0; }
-  h3 { font-size:17px; margin:18px 0 6px; }
-  header.ship { display:grid; grid-template-columns:1.2fr 2fr; gap:24px; margin:18px 0; align-items:end; }
-  .kicker { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  header.ship h1 { font-size:34px; color:var(--green); margin-top:4px; }
-  .meta { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
-  .meta div span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  .meta div b { font-weight:600; }
-  .meta input { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
-  .meta input.need { border-color:var(--accent); background:#fff8f2; }
-  .steps { display:grid; grid-template-columns:repeat(5,1fr); gap:0; margin:6px 0 18px; position:sticky; top:0; z-index:5; background:var(--bg); padding:6px 0; }
-  .step { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); margin-left:-1px; background:#fff; color:var(--muted); font-size:14px; position:relative; }
-  .step:first-child { border-radius:8px 0 0 8px; margin-left:0; } .step:last-child { border-radius:0 8px 8px 0; }
-  .step i { font-style:normal; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--none-bg); font-size:12px; font-weight:700; flex:none; }
-  .step small { display:block; font-size:12px; }
-  .step.done { color:var(--green); } .step.done i { background:var(--green-2); color:#fff; }
-  .step.now { color:var(--ink); border-color:var(--accent); z-index:1; } .step.now i { background:var(--accent); color:#fff; }
-  .cols { display:grid; grid-template-columns:minmax(360px,5fr) 7fr; gap:20px; align-items:start; }
-  @media (max-width:980px){ header.ship,.cols{grid-template-columns:1fr;} .meta{grid-template-columns:repeat(2,1fr);} .steps{grid-template-columns:1fr; position:static;} .step{margin-left:0; margin-top:-1px; border-radius:0 !important;} }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
-  .card + .card { margin-top:20px; }
-  .card h2 { font-size:21px; margin-bottom:2px; }
-  .sub { color:var(--muted); font-size:13px; margin-bottom:12px; }
-  .section-tag { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:700; }
-  .tscroll { overflow-x:auto; }
-  table { width:100%; border-collapse:collapse; font-size:13.5px; }
-  th { text-align:left; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); padding:6px 8px; border-bottom:2px solid var(--ink); vertical-align:bottom; }
-  td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
-  button, .filebtn { font:inherit; border:1px solid var(--line); background:#fff; padding:7px 12px; border-radius:8px; cursor:pointer; color:var(--ink); }
-  button:hover, .filebtn:hover { border-color:var(--green-2); }
-  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
-  button.approve { background:var(--ok); color:#fff; border-color:var(--ok); }
-  button.reject { color:var(--bad); border-color:#e5b8ad; }
-  button.practice { color:var(--demo); border-color:#d4c8ea; }
-  button:disabled { opacity:.45; cursor:not-allowed; }
-  .filebtn input { display:none; }
-  .pills { display:flex; gap:8px; flex-wrap:wrap; }
-  .pill { font-size:12.5px; padding:3px 10px; border-radius:999px; font-weight:600; white-space:nowrap; }
-  .p-certain { background:var(--ok-bg); color:var(--ok); } .p-check { background:var(--warn-bg); color:var(--warn); }
-  .p-none { background:var(--none-bg); color:var(--none); } .p-approved, .p-corrected { background:var(--green); color:#fff; }
-  .p-rejected { background:var(--bad-bg); color:var(--bad); }
-  .p-A { background:var(--bad-bg); color:var(--bad); } .p-B { background:var(--warn-bg); color:var(--warn); } .p-demo { background:var(--demo-bg); color:var(--demo); }
-  .group-h { display:flex; justify-content:space-between; align-items:baseline; margin-top:16px; border-bottom:2px solid var(--ink); padding-bottom:4px; }
-  .group-h b { font-family:Georgia,serif; font-size:16px; }
-  .group-h span { font-size:12.5px; color:var(--muted); }
-  .prop { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; background:#fff; }
-  .prop.certain { border-left:4px solid var(--ok); } .prop.check { border-left:4px solid var(--warn); } .prop.none { border-left:4px solid var(--none); }
-  .prop.decided { background:#fafbf9; }
-  .prop-head { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
-  .prop-head b { font-size:15px; }
-  .chain { display:flex; align-items:stretch; gap:6px; margin:10px 0 8px; flex-wrap:wrap; }
-  .chain .node { background:#f6f8f5; border:1px solid var(--line); border-radius:8px; padding:5px 9px; font-size:13px; }
-  .chain .node span { display:block; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  .chain .arrow { align-self:center; color:var(--muted); }
-  .chain .node.warn { background:var(--bad-bg); border-color:#e5b8ad; color:var(--bad); }
-  .reason { font-size:13.5px; color:#34423a; }
-  .finding { font-size:13px; margin-top:6px; }
-  .lineflag { font-size:13px; background:var(--warn-bg); color:#5c3d00; border-radius:6px; padding:5px 9px; margin-top:8px; }
-  .checks { display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; font-size:12.5px; color:var(--muted); }
-  .checks .y::before { content:"✓ "; color:var(--ok); font-weight:700; } .checks .n::before { content:"✗ "; color:var(--bad); font-weight:700; }
-  .src { font-size:11.5px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:1px 6px; margin-left:6px; }
-  .act { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); }
-  .act select, .act input { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; }
-  .act input.note { flex:1; min-width:140px; }
-  .signed { font-size:13px; color:var(--green); margin-top:8px; }
-  .flag { display:flex; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:14px; }
-  .flag b { min-width:72px; color:var(--accent); }
-  .empty { color:var(--muted); font-style:italic; padding:10px 0; }
-  .twocol { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-  @media (max-width:980px){ .twocol{grid-template-columns:1fr;} }
-  .log div { font-size:13px; padding:4px 0; border-bottom:1px solid var(--line); display:flex; gap:12px; }
-  .log time { color:var(--muted); min-width:64px; font-variant-numeric:tabular-nums; }
-  .log b { min-width:96px; }
-  .err { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bad); color:#fff; padding:10px 16px; border-radius:8px; max-width:80%; box-shadow:0 4px 18px rgba(0,0,0,.2); }
-  dialog { border:1px solid var(--line); border-radius:12px; padding:20px; width:min(760px,92vw); }
-  dialog textarea { width:100%; height:240px; font:13px/1.4 Consolas,monospace; padding:8px; border:1px solid var(--line); border-radius:8px; }
-  dialog input { width:100%; padding:7px 8px; margin-bottom:8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
-  .hist td.chg { color:var(--bad); font-weight:600; }
-  .note-small { font-size:12.5px; color:var(--muted); margin-top:8px; }
-  .report-card.signed-final { border:2px solid var(--ok); }
-  .report-head { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; align-items:flex-end; }
-  .chapter { margin-top:22px; }
-  .chapter > header { display:flex; gap:10px; align-items:baseline; border-bottom:2px solid var(--ink); padding-bottom:4px; margin-bottom:6px; }
-  .chapter > header .no { font:700 13px Consolas,monospace; color:var(--green-2); }
-  .chapter > header h3 { margin:0; }
-  .sig { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--ink); border-radius:6px; margin-top:10px; }
-  .sig div { padding:10px 14px; border-left:1px solid var(--ink); } .sig div:first-child { border-left:0; }
-  .sig span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  .score { border:2px solid var(--demo); border-radius:10px; padding:12px 14px; margin-top:12px; background:var(--demo-bg); }
-  .record { margin-top:10px; border-left:3px solid var(--line); padding-left:10px; }
-  .score.pass { border-color:var(--ok); background:var(--ok-bg); }
-  .projbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:14px; }
-  .projbar select { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
-  .regform { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:8px; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line); }
-  .regform label { display:grid; gap:2px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
-  .regform input, .regform select { font:inherit; font-size:14px; text-transform:none; letter-spacing:0; color:var(--ink); padding:6px 8px; border:1px solid var(--line); border-radius:6px; min-width:0; }
-  .regform .wide { grid-column:span 2; }
-  @media (max-width:980px){ .regform{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  td.miss { color:var(--bad); font-size:12.5px; }
-  tr.ns td { background:var(--demo-bg); }
-  .evidence { font-size:12.5px; color:var(--muted); margin-top:8px; line-height:1.6; }
-  .evidence code { font-size:12px; }
-  .stale { background:var(--warn-bg); border:1px solid #ecd28f; color:#5c3d00; border-radius:8px; padding:10px 14px; margin-top:12px; font-size:14px; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101211;          --surface: #171a18;       --surface-2: #1e2220;
+      --border: #282d2a;      --border-strong: #39403b;
+      --text: #e7ebe8;        --text-2: #a2aaa5;        --text-3: #78807b;
+      --brand: #53b38a;       --brand-hover: #66c49b;   --brand-soft: #1b3128;  --on-brand: #07130d;
+      --ok: #5fc493;          --ok-soft: #173025;
+      --warn: #e0a842;        --warn-soft: #33291a;
+      --bad: #f0806b;         --bad-soft: #3a1e19;
+      --info: #ad9ff0;        --info-soft: #252039;
+      --neutral-soft: #232825;
+      --shadow-pop: 0 10px 30px rgba(0, 0, 0, .5), 0 1px 3px rgba(0, 0, 0, .4);
+    }
+  }
+
+  /* ---------- Base ---------- */
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-md)/1.5 var(--font); }
+  h1, h2, h3 { margin: 0; color: var(--text); letter-spacing: -.01em; }
+  h1 { font-size: var(--fs-xl); font-weight: 600; line-height: 1.25; }
+  h2 { font-size: var(--fs-lg); font-weight: 600; }
+  h3 { font-size: var(--fs-md); font-weight: 600; margin: var(--s-5) 0 var(--s-2); }
+  p { margin: 0; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+  a { color: var(--brand); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :focus-visible { outline: none; box-shadow: var(--focus); }
+  .muted { color: var(--text-2); }
+  .small { font-size: var(--fs-sm); color: var(--text-2); }
+  .container { max-width: 1320px; margin: 0 auto; padding: 0 var(--s-5); }
+
+  /* ---------- Controls ---------- */
+  button, .filebtn {
+    font: 500 var(--fs-sm)/1 var(--font); height: 32px; padding: 0 var(--s-3);
+    display: inline-flex; align-items: center; gap: var(--s-2); white-space: nowrap;
+    color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+    cursor: pointer; transition: background-color .12s, border-color .12s, color .12s;
+  }
+  button:hover, .filebtn:hover { background: var(--surface-2); }
+  button:active { background: var(--neutral-soft); }
+  button:disabled, button:disabled:hover { opacity: .45; cursor: not-allowed; background: var(--surface); }
+  button.primary, button.approve { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  button.primary:hover, button.approve:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+  button.primary:disabled, button.approve:disabled { background: var(--brand); }
+  button.reject { color: var(--bad); }
+  button.reject:hover { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, var(--border-strong)); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+  button.ghost:hover { background: var(--surface-2); color: var(--text); }
+  button.danger { background: transparent; border-color: transparent; color: var(--bad); }
+  button.danger:hover { background: var(--bad-soft); }
+  button.practice { color: var(--info); }
+  .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .filebtn:focus-within { box-shadow: var(--focus); }
+
+  input, select, textarea {
+    font: var(--fs-md)/1.4 var(--font); color: var(--text); background: var(--surface);
+    border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 6px 10px; min-width: 0;
+  }
+  input, select { height: 32px; }
+  input::placeholder, textarea::placeholder { color: var(--text-3); }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+  input:disabled { background: var(--surface-2); color: var(--text-2); }
+  input.need { border-color: var(--warn); background: var(--warn-soft); }
+
+  .field { display: grid; gap: var(--s-1); font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); }
+  .field input, .field select, .field textarea { width: 100%; font-weight: 400; }
+  .field .req { color: var(--text-3); font-weight: 400; }
+
+  .actions { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
+  .actions .spacer { flex: 1; }
+
+  /* ---------- Badges ---------- */
+  .pill { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+          font-size: var(--fs-xs); font-weight: 500; white-space: nowrap; background: var(--neutral-soft); color: var(--text-2); }
+  .p-certain, .p-approved, .p-corrected { background: var(--ok-soft); color: var(--ok); }
+  .p-check, .p-B { background: var(--warn-soft); color: var(--warn); }
+  .p-rejected, .p-A { background: var(--bad-soft); color: var(--bad); }
+  .p-demo { background: var(--info-soft); color: var(--info); }
+  .p-none { background: var(--neutral-soft); color: var(--text-2); }
+
+  /* ---------- App frame ---------- */
+  .progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 50; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .15s; }
+  .progress::after { content: ""; position: absolute; inset: 0; width: 30%; background: var(--brand); animation: slide 1s ease-in-out infinite; }
+  .is-busy .progress { opacity: 1; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  @media (prefers-reduced-motion: reduce) { .progress::after { animation: none; width: 100%; } }
+
+  .topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .topbar-inner { display: flex; align-items: center; gap: var(--s-4); min-height: 56px; flex-wrap: wrap; padding-top: var(--s-2); padding-bottom: var(--s-2); }
+  .brand { display: flex; align-items: center; gap: var(--s-2); font-weight: 600; }
+  .brand-mark { width: 24px; height: 24px; border-radius: var(--r-sm); background: var(--brand); color: var(--on-brand);
+                display: grid; place-items: center; font-size: var(--fs-sm); font-weight: 700; }
+  .brand-sub { color: var(--text-3); font-weight: 400; font-size: var(--fs-sm); }
+  .topbar-divider { width: 1px; height: 20px; background: var(--border); }
+  .topbar-project { display: flex; align-items: center; gap: var(--s-2); }
+  .topbar-project select { max-width: 320px; }
+  .topbar-user { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--text-2); }
+  .topbar-user input { width: 200px; }
+  .topbar-user b { color: var(--text); font-weight: 500; }
+
+  .notice { border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: var(--fs-xs); color: var(--text-2); }
+  .notice .container { padding-top: 6px; padding-bottom: 6px; }
+
+  main.container { padding-top: var(--s-5); padding-bottom: 96px; }
+
+  .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s-5); flex-wrap: wrap; margin-bottom: var(--s-5); }
+  .crumb { font-size: var(--fs-sm); color: var(--text-2); margin-bottom: var(--s-1); }
+  .meta { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-6); margin: 0; }
+  .meta div { min-width: 0; }
+  .meta dt { font-size: var(--fs-xs); color: var(--text-3); }
+  .meta dd { margin: 0; font-size: var(--fs-md); font-weight: 500; }
+
+  .stepper { list-style: none; margin: 0 0 var(--s-5); padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+  .stepper li { display: flex; gap: var(--s-2); padding: var(--s-3) var(--s-4); border-left: 1px solid var(--border); min-width: 0; color: var(--text-3); }
+  .stepper li:first-child { border-left: 0; }
+  .stepper .num { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px;
+                  font-size: 11px; font-weight: 600; border: 1px solid var(--border-strong); color: var(--text-2); }
+  .stepper .t { font-size: var(--fs-sm); font-weight: 500; }
+  .stepper .d { display: block; font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stepper li.done { color: var(--text-2); }
+  .stepper li.done .num { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  .stepper li.now { color: var(--text); box-shadow: inset 0 -2px 0 var(--brand); }
+  .stepper li.now .num { border-color: var(--brand); color: var(--brand); }
+
+  .callout { border: 1px solid var(--border); border-left: 3px solid var(--text-3); border-radius: var(--r-sm); background: var(--surface);
+             padding: var(--s-3) var(--s-4); font-size: var(--fs-sm); color: var(--text-2); margin-bottom: var(--s-4); }
+  .callout b { color: var(--text); font-weight: 600; }
+  .callout.practice { border-left-color: var(--info); background: var(--info-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+  /* ---------- Panels ---------- */
+  .layout { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--s-5); align-items: start; }
+  .stack > * + * { margin-top: var(--s-5); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+  .panel + .panel { margin-top: var(--s-5); }
+  .panel-head { padding: var(--s-4) var(--s-5) var(--s-3); display: flex; justify-content: space-between; gap: var(--s-4); align-items: flex-start; flex-wrap: wrap; }
+  .eyebrow { font-size: var(--fs-xs); color: var(--text-3); margin-bottom: 2px; }
+  .panel-desc { font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; max-width: 72ch; }
+  .panel-body { padding: 0 var(--s-5) var(--s-5); }
+  .panel-foot { padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border); background: var(--surface-2);
+                border-radius: 0 0 var(--r-md) var(--r-md); }
+  .divider { border: 0; border-top: 1px solid var(--border); margin: var(--s-4) 0; }
+  .empty { padding: var(--s-5) var(--s-4); text-align: center; color: var(--text-2); font-size: var(--fs-sm);
+           border: 1px dashed var(--border-strong); border-radius: var(--r-sm); }
+  .boot { padding: 120px var(--s-5); text-align: center; color: var(--text-2); }
+
+  /* ---------- Tables ---------- */
+  .tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+  th { text-align: left; font-weight: 500; font-size: var(--fs-xs); color: var(--text-2); padding: var(--s-2) var(--s-3);
+       border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  td { padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+  tr:last-child td { border-bottom: 0; }
+  td.code { font-weight: 600; white-space: nowrap; }
+  td.miss, .miss { color: var(--bad); }
+  tr.ns td { background: var(--info-soft); }
+  .hist td.chg { color: var(--bad); font-weight: 500; }
+  .table-frame { border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+
+  /* ---------- Registration ---------- */
+  .regform { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-3); }
+  .regform .wide { grid-column: span 2; }
+
+  /* ---------- Proposals ---------- */
+  .summary { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
+  .group-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); flex-wrap: wrap;
+             margin: var(--s-5) 0 var(--s-2); }
+  .group-h b { font-size: var(--fs-sm); font-weight: 600; }
+  .group-h span { font-size: var(--fs-xs); color: var(--text-3); }
+  .prop { border: 1px solid var(--border); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); background: var(--surface);
+          box-shadow: inset 3px 0 0 var(--text-3); }
+  .prop + .prop { margin-top: var(--s-2); }
+  .prop.certain { box-shadow: inset 3px 0 0 var(--ok); }
+  .prop.check { box-shadow: inset 3px 0 0 var(--warn); }
+  .prop.none { box-shadow: inset 3px 0 0 var(--border-strong); }
+  .prop.decided { background: var(--surface-2); }
+  .prop-head { display: flex; justify-content: space-between; gap: var(--s-3); align-items: flex-start; }
+  .prop-title { min-width: 0; }
+  .prop-code { font-weight: 600; margin-right: var(--s-2); }
+  .prop-result { color: var(--text); }
+  .prop-meta { font-size: var(--fs-xs); color: var(--text-3); margin-top: 2px; }
+  .src { color: var(--text-2); }
+  .chain { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin: var(--s-3) 0 var(--s-2); padding: var(--s-2) var(--s-3);
+           background: var(--surface-2); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+  .prop.decided .chain { background: var(--surface); }
+  .chain .node span { display: block; font-size: 11px; color: var(--text-3); }
+  .chain .node.warn { color: var(--bad); }
+  .chain .arrow { display: none; }
+  .reason { font-size: var(--fs-sm); color: var(--text-2); }
+  .finding { font-size: var(--fs-sm); margin-top: var(--s-1); display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
+  .lineflag { font-size: var(--fs-sm); color: var(--warn); margin-top: var(--s-2); }
+  .lineflag::before { content: "⚑ "; }
+  .checks { display: flex; gap: var(--s-1) var(--s-3); flex-wrap: wrap; margin-top: var(--s-2); font-size: var(--fs-xs); color: var(--text-2); }
+  .checks .y::before { content: "✓ "; color: var(--ok); font-weight: 600; }
+  .checks .n::before { content: "✕ "; color: var(--bad); font-weight: 600; }
+  .signed { font-size: var(--fs-sm); color: var(--ok); margin-top: var(--s-2); }
+  .act { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--border); }
+  .act .note { flex: 1; min-width: 140px; }
+  .act .reject { margin-left: auto; }
+
+  .flag { display: flex; gap: var(--s-3); padding: var(--s-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+  .flag:last-child { border-bottom: 0; }
+  .flag b { min-width: 72px; font-weight: 600; }
+
+  .log > div { font-size: var(--fs-sm); padding: 6px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 72px 110px 1fr; gap: var(--s-3); }
+  .log > div:last-child { border-bottom: 0; }
+  .log time { color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .log b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .log .log-title { display: block; border: 0; color: var(--text-3); font-size: var(--fs-xs); padding-bottom: var(--s-1); }
+
+  .evidence { font-size: var(--fs-xs); color: var(--text-2); margin-top: var(--s-4); display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--s-3); }
+  .evidence dt { color: var(--text-3); }
+  .evidence dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+  .score { border: 1px solid var(--border); border-left: 3px solid var(--info); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4);
+           margin-top: var(--s-3); background: var(--info-soft); font-size: var(--fs-sm); }
+  .score.pass { border-left-color: var(--ok); background: var(--ok-soft); }
+
+  /* ---------- Report preview ---------- */
+  .report-card.signed-final { border-color: var(--ok); }
+  .chapter { margin-top: var(--s-5); }
+  .chapter > header { display: flex; gap: var(--s-3); align-items: baseline; padding-bottom: var(--s-2); margin-bottom: var(--s-2); border-bottom: 1px solid var(--border); }
+  .chapter > header .no { font: 500 var(--fs-xs)/1 var(--mono); color: var(--text-3); min-width: 72px; }
+  .chapter > header h3 { margin: 0; }
+  .record { margin-top: var(--s-3); }
+  .record > b { display: block; font-size: var(--fs-sm); margin-bottom: var(--s-1); }
+  .sig { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--r-sm); }
+  .sig div { padding: var(--s-3) var(--s-4); border-left: 1px solid var(--border); }
+  .sig div:first-child { border-left: 0; }
+  .sig span { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+
+  /* ---------- Dialogs & toasts ---------- */
+  dialog { border: 1px solid var(--border); border-radius: var(--r-md); padding: 0; width: min(720px, calc(100vw - 32px));
+           background: var(--surface); color: var(--text); box-shadow: var(--shadow-pop); }
+  dialog::backdrop { background: rgba(10, 14, 12, .45); }
+  .dialog-head { padding: var(--s-5) var(--s-5) var(--s-3); }
+  .dialog-head p { font-size: var(--fs-sm); color: var(--text-2); margin-top: var(--s-1); }
+  .dialog-body { padding: 0 var(--s-5) var(--s-5); max-height: 64vh; overflow: auto; }
+  .dialog-foot { display: flex; justify-content: flex-end; gap: var(--s-2); padding: var(--s-3) var(--s-5);
+                 border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--r-md) var(--r-md); }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3) var(--s-4); }
+  .form-grid .span-2 { grid-column: span 2; }
+  .form-section { grid-column: span 2; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); margin-top: var(--s-2);
+                  padding-top: var(--s-3); border-top: 1px solid var(--border); }
+  dialog textarea { width: 100%; height: 220px; font: var(--fs-sm)/1.45 var(--mono); }
+
+  .toasts { position: fixed; right: var(--s-5); bottom: var(--s-5); z-index: 60; display: grid; gap: var(--s-2); max-width: min(420px, calc(100vw - 32px)); }
+  .toast { background: var(--text); color: var(--bg); padding: var(--s-3) var(--s-4); border-radius: var(--r-sm); box-shadow: var(--shadow-pop);
+           font-size: var(--fs-sm); border-left: 3px solid var(--bad); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .regform { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 860px) {
+    .stepper { grid-template-columns: minmax(0, 1fr); }
+    .stepper li { border-left: 0; border-top: 1px solid var(--border); }
+    .stepper li:first-child { border-top: 0; }
+    .stepper li.now { box-shadow: inset 2px 0 0 var(--brand); }
+    .topbar-user { margin-left: 0; width: 100%; }
+    .topbar-user input { flex: 1; width: auto; }
+    .topbar-divider { display: none; }
+  }
+  @media (max-width: 640px) {
+    .topbar { position: static; }            /* a wrapped top bar would cover a third of a phone screen */
+    .container { padding: 0 var(--s-4); }
+    .panel-head { padding: var(--s-4) var(--s-4) var(--s-3); }
+    .panel-body { padding: 0 var(--s-4) var(--s-4); }
+    .regform, .form-grid { grid-template-columns: minmax(0, 1fr); }
+    .regform .wide, .form-grid .span-2, .form-section { grid-column: auto; }
+    .topbar-project { width: 100%; }
+    .topbar-project select { flex: 1; max-width: none; }
+    .brand-sub { display: none; }
+    .log > div { grid-template-columns: 64px 1fr; }
+    .log > div span { grid-column: 1 / -1; }
+    .sig { grid-template-columns: minmax(0, 1fr); }
+    .sig div { border-left: 0; border-top: 1px solid var(--border); }
+    .sig div:first-child { border-top: 0; }
+    .act .reject { margin-left: 0; }
+    .toasts { left: var(--s-4); right: var(--s-4); bottom: var(--s-4); }
+  }
 </style>
 </head>
 <body>
-<div class="wrap" id="app"><p>Loading…</p></div>
-<dialog id="newproj">
-  <h3>New project</h3>
-  <p class="sub">One object (ship or structure) and one survey. Fictitious data only.</p>
-  <input id="np-name" placeholder="Ship or object name, e.g. MV Example">
-  <input id="np-ref" placeholder="IMO number or object code">
-  <input id="np-kind" placeholder="Ship type · flag, e.g. Bulk carrier · MT">
-  <input id="np-site" placeholder="Survey location, e.g. Shipyard, Rotterdam">
-  <input id="np-project" placeholder="RVL project number">
-  <input id="np-date" placeholder="Survey date, e.g. 12 Nov 2026">
-  <input id="np-survey_period" placeholder="Survey period, e.g. 12–13 Nov 2026">
-  <input id="np-client" placeholder="Client (fictitious)"><input id="np-client_address" placeholder="Client address">
-  <input id="np-owner" placeholder="Owner (fictitious)"><input id="np-owner_address" placeholder="Owner address">
-  <input id="np-surveyor" placeholder="Survey conducted by"><input id="np-technical_responsible" placeholder="Technical Responsible Person">
-  <input id="np-project_coordinator" placeholder="Project coordinator">
-  <div class="btns"><button class="primary" id="np-ok">Create project</button><button id="np-cancel">Cancel</button></div>
+<div class="progress" aria-hidden="true"></div>
+<div id="app"><div class="boot" role="status">Loading project…</div></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="newproj" aria-labelledby="np-title">
+  <div class="dialog-head">
+    <h2 id="np-title">New project</h2>
+    <p>One object (ship or structure) and one survey. Fictitious data only.</p>
+  </div>
+  <div class="dialog-body">
+    <div class="form-grid">
+      <label class="field span-2">Object name <span class="req">required</span><input id="np-name" placeholder="MV Example"></label>
+      <label class="field">RVL project number <span class="req">required</span><input id="np-project" placeholder="J-26-014"></label>
+      <label class="field">Survey location <span class="req">required</span><input id="np-site" placeholder="Shipyard, Rotterdam"></label>
+      <label class="field">Object code / IMO number<input id="np-ref" placeholder="IMO 9000000"></label>
+      <label class="field">Type<input id="np-kind" placeholder="Bulk carrier · MT"></label>
+      <label class="field">Survey date<input id="np-date" placeholder="12 Nov 2026"></label>
+      <label class="field">Survey period<input id="np-survey_period" placeholder="12–13 Nov 2026"></label>
+      <div class="form-section">Client and owner</div>
+      <label class="field">Client<input id="np-client" placeholder="Client name"></label>
+      <label class="field">Client address<input id="np-client_address"></label>
+      <label class="field">Owner<input id="np-owner" placeholder="Owner name"></label>
+      <label class="field">Owner address<input id="np-owner_address"></label>
+      <div class="form-section">People</div>
+      <label class="field">Survey conducted by<input id="np-surveyor"></label>
+      <label class="field">Technical Responsible Person<input id="np-technical_responsible"></label>
+      <label class="field">Project coordinator<input id="np-project_coordinator"></label>
+    </div>
+  </div>
+  <div class="dialog-foot"><button id="np-cancel">Cancel</button><button class="primary" id="np-ok">Create project</button></div>
 </dialog>
-<dialog id="paste">
-  <h3>Paste a lab report</h3>
-  <p class="sub">Header lines, then a line with <code>---</code>, then one line per result. An optional header line <code>Columns: Sample No. | Description | Analysis | Result | Certificate</code> names extra columns. Fictitious data only.</p>
-  <input id="paste-label" placeholder="Name, for example Lab report 3" value="Lab report 3">
-  <textarea id="paste-text">Report: L-26-4600
+
+<dialog id="paste" aria-labelledby="paste-title">
+  <div class="dialog-head">
+    <h2 id="paste-title">Paste a lab report</h2>
+    <p>Header lines, then a line with <code>---</code>, then one line per result. An optional header line
+      <code>Columns: Sample No. | Description | Analysis | Result | Certificate</code> names extra columns. Fictitious data only.</p>
+  </div>
+  <div class="dialog-body">
+    <label class="field">Name<input id="paste-label" placeholder="Lab report 3" value="Lab report 3"></label>
+    <label class="field" style="margin-top:12px">Report text<textarea id="paste-text">Report: L-26-4600
 Lab: Example Lab Ltd. (ISO 17025, fictitious)
 Project: J-26-014
 Columns: Sample No. | Description | Analysis | Result | Certificate
 ---
 M01 | White insulation | Asbestos (NEN 5896) | Chrysotile 12% | C-4600-01
-HM01 | Railing paint | Heavy metals | Lead 1000 mg/kg | C-4600-02</textarea>
-  <div class="btns"><button class="primary" id="paste-ok">Read this report</button><button id="paste-cancel">Cancel</button></div>
+HM01 | Railing paint | Heavy metals | Lead 1000 mg/kg | C-4600-02</textarea></label>
+  </div>
+  <div class="dialog-foot"><button id="paste-cancel">Cancel</button><button class="primary" id="paste-ok">Read this report</button></div>
 </dialog>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -162,23 +373,38 @@ let S = null;             // last state from the server
 let inspector = "";       // the name that signs every decision
 const reopened = new Set();  // decided lines whose buttons are shown again ("Change decision")
 let currentReport = null;
+let pending = 0;          // requests in flight: drives the progress bar at the top
 
 async function api(path, body) {
   const opt = body === undefined ? {} : { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) };
-  const res = await fetch(path, opt);
-  if (res.status === 401 && path !== "/api/login") { location.href = "/login"; throw new Error("login required"); }
-  const data = await res.json();
-  if (!res.ok) { toast(data.error || "Something went wrong"); throw new Error(data.error); }
-  return data;
+  pending++; document.documentElement.classList.add("is-busy");
+  try {
+    const res = await fetch(path, opt);
+    if (res.status === 401 && path !== "/api/login") { location.href = "/login"; throw new Error("login required"); }
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || "Something went wrong"); throw new Error(data.error); }
+    return data;
+  } finally {
+    if (--pending === 0) document.documentElement.classList.remove("is-busy");
+  }
 }
 function toast(msg) {
-  const d = document.createElement("div"); d.className = "err"; d.textContent = msg; document.body.appendChild(d);
-  setTimeout(() => d.remove(), 5000);
+  const d = document.createElement("div"); d.className = "toast"; d.setAttribute("role", "alert"); d.textContent = msg;
+  $("#toasts").appendChild(d);
+  setTimeout(() => d.remove(), 6000);
 }
 function localTime(ts) { return new Date(ts.replace(" ", "T") + "Z").toLocaleTimeString("en-GB"); }
 async function load(report) {
   const q = report ? "?report=" + report : "";
-  S = await api("/api/state" + q); currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render();
+  try {
+    S = await api("/api/state" + q);
+  } catch (e) {
+    if (!S) $("#app").innerHTML = `<div class="boot" role="alert"><h2>James could not be reached</h2>
+      <p class="muted" style="margin-top:8px">Check that the server is running, then reload this page.</p>
+      <p style="margin-top:16px"><button class="primary" onclick="location.reload()">Reload</button></p></div>`;
+    return;
+  }
+  currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render();
 }
 async function post(path, body) { S = await api(path, body); currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render(); }
 async function logout() { try { await fetch("/api/logout", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" }); } catch (e) {} location.href = "/login"; }
@@ -188,37 +414,57 @@ const SRC = { rules: "rules", both: "rules + AI agree", ai: "AI only", disagree:
               "rules (ai unusable)": "rules (AI not used)" };
 const STATUS = { above: "above threshold", at: "exactly on threshold", below: "below threshold", unknown: "inspector classifies" };
 
+function panelHead(step, title, desc, aside) {
+  return `<div class="panel-head"><div>${step ? `<div class="eyebrow">${step}</div>` : ""}<h2>${title}</h2>${desc ? `<p class="panel-desc">${desc}</p>` : ""}</div>${aside || ""}</div>`;
+}
+
 function render() {
   const o = S.object, r = S.report;
   const done = r ? r.counts.decided === r.counts.total : false;
   const nreg = S.register.length;
   const stepNow = !nreg ? 1 : !r ? 2 : r.signed ? 6 : done ? 5 : 4;
-  const sub = [`${nreg} sample(s) registered`, r ? `${esc(r.ref || r.label)} · ${r.counts.total} lines` : "no report yet", r ? `${r.counts.certain} certain · ${r.counts.check} check · ${r.counts.none} no link` : "",
-               r ? `${r.counts.decided} / ${r.counts.total} decided` : "", r && r.signed ? "signed by " + esc(r.signed.by) : r && r.practice ? "practice: no sign-off" : "draft"];
-  const steps = ["Project & field registration", "Lab report read", "Agent proposes links", "Inspector decides", "Signed result"]
-    .map((t, i) => `<div class="step ${i + 1 < stepNow ? "done" : i + 1 === stepNow ? "now" : ""}"><i>${i + 1}</i><div>${t}<small>${sub[i]}</small></div></div>`).join("");
+  const sub = [`${nreg} sample${nreg === 1 ? "" : "s"} registered`, r ? `${esc(r.ref || r.label)} · ${r.counts.total} lines` : "No report yet",
+               r ? `${r.counts.certain} certain · ${r.counts.check} check · ${r.counts.none} no link` : "–",
+               r ? `${r.counts.decided} / ${r.counts.total} decided` : "–", r && r.signed ? "Signed by " + esc(r.signed.by) : r && r.practice ? "Practice: no sign-off" : "Draft"];
+  const steps = ["Field registration", "Lab report read", "Agent proposes links", "Inspector decides", "Signed result"]
+    .map((t, i) => {
+      const state = i + 1 < stepNow ? "done" : i + 1 === stepNow ? "now" : "";
+      return `<li class="${state}" ${state === "now" ? 'aria-current="step"' : ""}><span class="num">${state === "done" ? "✓" : i + 1}</span><div style="min-width:0"><span class="t">${t}</span><span class="d">${sub[i]}</span></div></li>`;
+    }).join("");
+  const user = S.login
+    ? `<span>Signed in as <b>${esc(S.me)}</b></span><button id="logout" class="ghost">Log out</button>`
+    : `<label for="inspector">Inspector</label><input id="inspector" class="${inspector ? "" : "need"}" placeholder="Your name (signs every decision)" value="${esc(inspector)}" autocomplete="name">`;
   $("#app").innerHTML = `
-    <div class="banner"><b>Concept prototype.</b> All data is fictitious and no real AI is running yet. The agent proposes, the inspector decides. ${esc(S.thresholds_note)}</div>
-    ${r && r.practice ? `<div class="banner practice"><b>Practice review.</b> Some proposals in this report are deliberately wrong. Review as you normally would; your score shows when every line is decided. Nothing here reaches the history or a signed report.</div>` : ""}
-    <header class="ship">
-      <div><div class="kicker">James · IHM Part I · Project ${esc(o.project)} (fictitious)</div><h1>${esc(o.name)}</h1></div>
-      <div class="meta">
-        <div><span>IMO number</span><b>${esc(o.ref)}</b></div>
-        <div><span>Ship type · flag</span><b>${esc(o.kind)}</b></div>
-        <div><span>Survey location</span><b>${esc(o.site)}</b></div>
-        <div><span>Survey date</span><b>${esc(o.survey_date || "–")}</b></div>
-        <div><span>Inspector (signs every decision)</span>${S.login
-          ? `<b>${esc(S.me)}</b> <button id="logout" style="margin-left:6px">Log out</button>`
-          : `<input id="inspector" class="${inspector ? "" : "need"}" placeholder="Inspector name" value="${esc(inspector)}">`}</div>
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">J</span>James <span class="brand-sub">IHM lab agent</span></div>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <div class="topbar-project">
+          <label for="objpick" class="sr-only">Project</label>
+          <select id="objpick">${S.objects.map(x => `<option value="${x.id}" ${x.id === o.id ? "selected" : ""}>${esc(x.project)} · ${esc(x.name)}</option>`).join("")}</select>
+          <button id="new-project">New project</button>
+        </div>
+        <div class="topbar-user">${user}</div>
       </div>
     </header>
-    <div class="projbar">Project:
-      <select id="objpick">${S.objects.map(x => `<option value="${x.id}" ${x.id === o.id ? "selected" : ""}>${esc(x.project)} · ${esc(x.name)}</option>`).join("")}</select>
-      <button id="new-project">New project</button></div>
-    <div class="steps">${steps}</div>
-    ${registration()}
-    ${r ? screen(r) : `<div class="card"><div class="section-tag">Step 2 · Input</div><h2>Lab report</h2><p class="empty">No lab report yet for this project.${nreg ? "" : " Register the samples first, so the agent has something to link to."}</p>${buttons(null)}</div>`}
-  `;
+    <div class="notice"><div class="container">Concept prototype · fictitious data only · the agent proposes, the inspector decides.</div></div>
+    <main class="container">
+      ${r && r.practice ? `<div class="callout practice"><b>Practice review.</b> Some proposals in this report are deliberately wrong. Review as you normally would; your score shows when every line is decided. Nothing here reaches the history or a signed report.</div>` : ""}
+      <div class="page-head">
+        <div><div class="crumb">Project ${esc(o.project)}</div><h1>${esc(o.name)}</h1></div>
+        <dl class="meta">
+          <div><dt>Object code</dt><dd>${esc(o.ref || "–")}</dd></div>
+          <div><dt>Type</dt><dd>${esc(o.kind || "–")}</dd></div>
+          <div><dt>Survey location</dt><dd>${esc(o.site || "–")}</dd></div>
+          <div><dt>Survey date</dt><dd>${esc(o.survey_date || "–")}</dd></div>
+        </dl>
+      </div>
+      <ol class="stepper" aria-label="Progress">${steps}</ol>
+      ${registration()}
+      ${r ? screen(r) : `<section class="panel">${panelHead("Step 2", "Lab report", "Upload or paste the lab report for this project. The agent reads every line and proposes a link per result.")}
+          <div class="panel-body"><div class="empty">No lab report yet for this project.${nreg ? "" : " Register the samples first, so the agent has something to link to."}</div></div>
+          <div class="panel-foot">${buttons(null)}</div></section>`}
+    </main>`;
   const inp = $("#inspector");
   if (inp) inp.addEventListener("input", () => { inspector = inp.value; inp.classList.toggle("need", !inspector.trim()); });
   const lo = $("#logout"); if (lo) lo.onclick = logout;
@@ -227,18 +473,19 @@ function render() {
 
 function buttons(r) {
   const tabs = S.reports.length > 1
-    ? `<select id="pick">${S.reports.map(x => `<option value="${x.id}" ${r && x.id === r.id ? "selected" : ""}>${esc(x.label)}${x.report_ref && !x.label.includes(x.report_ref) ? " · " + esc(x.report_ref) : ""}</option>`).join("")}</select>` : "";
+    ? `<label for="pick" class="sr-only">Lab report</label><select id="pick">${S.reports.map(x => `<option value="${x.id}" ${r && x.id === r.id ? "selected" : ""}>${esc(x.label)}${x.report_ref && !x.label.includes(x.report_ref) ? " · " + esc(x.report_ref) : ""}</option>`).join("")}</select>` : "";
   const demo = S.object.demo ? `<button data-demo="b1">Demo report L-26-4471</button>
     <button data-demo="b2">Follow-up L-26-4590</button>` : "";
-  return `<div class="btns">
+  return `<div class="actions">
     ${tabs}
-    ${demo}
     <label class="filebtn" title="Fictitious lab reports only">Upload lab PDF<input type="file" id="upload" accept="application/pdf"></label>
     <button id="open-paste">Paste a lab report</button>
-    ${S.object.demo ? `<button id="practice" class="practice">Practice review</button>` : ""}
     ${r ? `<button id="reread">Let the agent read again</button>` : ""}
-    <button id="reset" class="reject">Reset everything</button></div>
-    <div class="note-small">Upload and paste: fictitious reports only, until RVL approves the use of real ones.</div>`;
+    ${demo}
+    ${S.object.demo ? `<button id="practice" class="practice">Practice review</button>` : ""}
+    <span class="spacer"></span>
+    <button id="reset" class="danger">Reset everything</button></div>
+    <p class="small" style="margin-top:8px">Upload and paste: fictitious reports only, until RVL approves the use of real ones.</p>`;
 }
 
 function screen(r) {
@@ -246,65 +493,66 @@ function screen(r) {
   const rowsHtml = r.rows.map(x => {
     const d = x.decision;
     const st = d ? `<span class="pill p-${d.state}">${d.state}</span>` : "";
-    return `<tr><td>${esc(x.raw_id || "–")}</td><td>${esc(x.description)}</td><td>${esc(x.method)}</td><td>${esc(x.result)}</td><td>${x.certificate ? esc(x.certificate) : '<span style="color:var(--bad)">–</span>'}</td><td>${st}</td></tr>`;
+    return `<tr><td class="code">${esc(x.raw_id || "–")}</td><td>${esc(x.description)}</td><td>${esc(x.method)}</td><td>${esc(x.result)}</td><td>${x.certificate ? esc(x.certificate) : '<span class="miss">–</span>'}</td><td>${st}</td></tr>`;
   }).join("");
   const attention = r.rows.filter(x => x.proposal.label !== "certain"), certain = r.rows.filter(x => x.proposal.label === "certain");
   const lineFlags = {}; r.flags.forEach(f => { if (f.line) (lineFlags[f.line] = lineFlags[f.line] || []).push(f); });
   const otherFlags = r.flags.filter(f => !f.line);
   return `
-  <div class="cols">
-    <div>
-      <div class="card">
-        <div class="section-tag">Step 2 · Input</div><h2>Lab report</h2>
-        <div class="sub">As it arrives from the lab. The agent reads every line.</div>
-        <div><b>${esc(r.lab || "Laboratory")}</b> · ${esc(r.ref || "")}</div>
-        ${r.stale ? `<div class="stale"><b>The field registration changed after this report was read.</b> The proposals may be out of date: click "Let the agent read again". Decisions already made stay in the log.</div>` : ""}
-        <div class="tscroll"><table style="margin-top:8px"><tr><th>Sample ID</th><th>Description</th><th>Analysis</th><th>Result</th><th>Certificate</th><th></th></tr>${rowsHtml}</table></div>
-        ${evidence(r.evidence)}
-        ${buttons(r)}
-      </div>
-      <div class="card"><div class="section-tag">Checks</div><h2>Not tied to one lab line</h2>
-        <div class="sub">Samples without a result, missing photos, places that could not be sampled. Line-level flags sit on the proposal itself.</div>
-        ${otherFlags.length ? otherFlags.map(f => `<div class="flag"><b>${esc(f.ref)}</b><span>${esc(f.text)}</span></div>`).join("") : `<div class="empty">No other flags.</div>`}
-      </div>
-    </div>
-    <div>
-      <div class="card">
-        <div class="section-tag">Steps 3 and 4 · Agent proposes, inspector decides</div><h2>Link proposals</h2>
-        <div class="sub">For each lab result, the chain back to the ship. What needs a human comes first.</div>
-        <div class="pills">
-          <span class="pill p-certain">${c.certain} certain</span><span class="pill p-check">${c.check} to check</span>
-          <span class="pill p-none">${c.none} no link</span><span class="pill p-approved">${c.decided} / ${c.total} decided</span>
+  <div class="layout" style="margin-top:24px">
+    <div class="stack">
+      <section class="panel">
+        ${panelHead("Step 2 · Input", `${esc(r.lab || "Lab report")}${r.ref ? ` <span class="muted" style="font-weight:400">· ${esc(r.ref)}</span>` : ""}`, "As it arrives from the lab. The agent reads every line.")}
+        <div class="panel-body">
+          ${r.stale ? `<div class="callout warn"><b>The field registration changed after this report was read.</b> The proposals may be out of date: choose "Let the agent read again". Decisions already made stay in the log.</div>` : ""}
+          <div class="table-frame tscroll"><table><thead><tr><th>Sample ID</th><th>Description</th><th>Analysis</th><th>Result</th><th>Certificate</th><th><span class="sr-only">Decision</span></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+          ${evidence(r.evidence)}
         </div>
-        <div class="note-small">${esc(r.ai_note)}</div>
-        ${practiceScore(r)}
-        ${attention.length ? `<div class="group-h"><b>Needs your attention</b><span>the agent is unsure or the evidence conflicts</span></div>${attention.map(x => prop(x, lineFlags[x.n])).join("")}` : ""}
-        <div class="group-h"><b>Certain links</b><span>exact ID and the description agrees, still your decision</span></div>
-        ${certain.map(x => prop(x, lineFlags[x.n])).join("")}
-      </div>
+        <div class="panel-foot">${buttons(r)}</div>
+      </section>
+      <section class="panel">
+        ${panelHead("Checks", "Not tied to one lab line", "Samples without a result, missing photos, places that could not be sampled. Line-level flags sit on the proposal itself.")}
+        <div class="panel-body">
+          ${otherFlags.length ? otherFlags.map(f => `<div class="flag"><b>${esc(f.ref)}</b><span>${esc(f.text)}</span></div>`).join("") : `<div class="empty">No other flags.</div>`}
+        </div>
+      </section>
     </div>
+    <section class="panel">
+      ${panelHead("Steps 3 and 4", "Link proposals", "For each lab result, the chain back to the object. What needs a human comes first.")}
+      <div class="panel-body">
+        <div class="summary">
+          <span class="pill p-certain">${c.certain} certain</span><span class="pill p-check">${c.check} to check</span>
+          <span class="pill p-none">${c.none} no link</span><span class="small">${c.decided} of ${c.total} decided</span>
+        </div>
+        ${r.ai_note ? `<p class="small" style="margin-top:8px">${esc(r.ai_note)}</p>` : ""}
+        ${practiceScore(r)}
+        ${attention.length ? `<div class="group-h"><b>Needs your attention</b><span>The agent is unsure or the evidence conflicts</span></div>${attention.map(x => prop(x, lineFlags[x.n])).join("")}` : ""}
+        ${certain.length ? `<div class="group-h"><b>Certain links</b><span>Exact ID and the description agrees — still your decision</span></div>${certain.map(x => prop(x, lineFlags[x.n])).join("")}` : ""}
+      </div>
+    </section>
   </div>
   ${reportCard(r)}
-  <div class="twocol" style="margin-top:20px">
-    <div class="card" style="margin:0"><div class="section-tag">Object history</div><h2>History of this ship</h2>
-      <div class="sub">Approved results are saved per version, so the next survey can compare.</div>
-      ${history()}
-      <div class="btns"><button id="save-history" ${c.linked && !r.practice ? "" : "disabled"}>Save approved lines to the history</button></div>
-    </div>
-    <div class="card" style="margin:0"><div class="section-tag">Traceability</div><h2>Audit log</h2>
-      <div class="sub">Every action by the agent and the inspector, with a time. Append-only.</div>
-      <div class="log">${r.audit.map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.text)}</span></div>`).join("")}</div>
-    </div>
+  <div class="layout" style="margin-top:24px">
+    <section class="panel">
+      ${panelHead("Object history", "History of this object", "Approved results are saved per version, so the next survey can compare.")}
+      <div class="panel-body">${historyTable()}</div>
+      <div class="panel-foot"><button id="save-history" ${c.linked && !r.practice ? "" : "disabled"}>Save approved lines to the history</button></div>
+    </section>
+    <section class="panel">
+      ${panelHead("Traceability", "Audit log", "Every action by the agent and the inspector, with a time. Append-only.")}
+      <div class="panel-body"><div class="log">${r.audit.length ? r.audit.map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.text)}</span></div>`).join("") : `<div class="empty">Nothing logged yet.</div>`}</div></div>
+    </section>
   </div>`;
 }
 
 function evidence(e) {
   if (!e) return "";
   const old = e.linker_version && e.linker_version !== e.current_linker;
-  return `<div class="evidence"><b>Evidence kept with this report</b><br>
-    Source: ${esc(e.source_file || "–")} · read from: ${esc(e.read_method || "–")}<br>
-    Fingerprint (SHA-256): <code title="${esc(e.sha256)}">${esc((e.sha256 || "").slice(0, 16))}…</code><br>
-    Linker version: <code>${esc(e.linker_version || "–")}</code>${old ? ` <span class="pill p-check">older than the current linker</span>` : ""} · AI prompt: ${esc(e.prompt_version || "AI step not used")}</div>`;
+  return `<dl class="evidence">
+    <dt>Source</dt><dd>${esc(e.source_file || "–")} · read from ${esc(e.read_method || "–")}</dd>
+    <dt>Fingerprint</dt><dd><code title="${esc(e.sha256)}">${esc((e.sha256 || "").slice(0, 16))}…</code> (SHA-256)</dd>
+    <dt>Linker</dt><dd><code>${esc(e.linker_version || "–")}</code>${old ? ` <span class="pill p-check">older than the current linker</span>` : ""}</dd>
+    <dt>AI prompt</dt><dd>${esc(e.prompt_version || "AI step not used")}</dd></dl>`;
 }
 
 let editCode = null;      // the sample being edited in the registration form, or null for a new one
@@ -312,62 +560,65 @@ function registration() {
   const reg = S.register, ed = editCode ? reg.find(s => s.code === editCode) : null;
   const v = (k) => esc(ed ? ed[k] : "");
   const rows = reg.map(s => `<tr class="${s.status === "not sampled" ? "ns" : ""}">
-      <td><b>${esc(s.code)}</b></td><td>${esc(s.source)}</td><td>${esc(s.deck)}</td><td>${esc(s.location)}</td><td>${esc(s.part)}</td>
-      <td>${esc(s.material)}${s.notes ? ", " + esc(s.notes) : ""}</td><td>${esc(s.photo)}</td><td>${esc(s.drawing)}</td><td>${esc([s.quantity, s.unit].filter(Boolean).join(" "))}</td>
-      <td>${s.status === "not sampled" ? `<span class="pill p-demo">not sampled</span> ${esc(s.restriction)}` : "sampled"}</td>
-      <td class="miss">${s.missing.length ? "missing: " + s.missing.join(", ") : ""}</td>
-      <td><button class="edit-sample" data-code="${esc(s.code)}">Edit</button></td></tr>`).join("");
+      <td class="code">${esc(s.code)}</td><td>${esc(s.source)}</td><td>${esc(s.deck)}</td><td>${esc(s.location)}</td><td>${esc(s.part)}</td>
+      <td>${esc(s.material)}${s.notes ? `<div class="small">${esc(s.notes)}</div>` : ""}</td><td>${esc(s.photo)}</td><td>${esc(s.drawing)}</td><td>${esc([s.quantity, s.unit].filter(Boolean).join(" "))}</td>
+      <td>${s.status === "not sampled" ? `<span class="pill p-demo">not sampled</span><div class="small">${esc(s.restriction)}</div>` : '<span class="small">sampled</span>'}</td>
+      <td class="miss small">${s.missing.length ? "Missing: " + s.missing.join(", ") : ""}</td>
+      <td><button class="edit-sample ghost" data-code="${esc(s.code)}">Edit</button></td></tr>`).join("");
   const log = S.register_log.slice(-5).reverse().map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.code)} ${esc(e.action)}: ${esc(e.detail)}</span></div>`).join("");
-  return `<div class="card" style="margin-bottom:20px">
-    <div class="section-tag">Step 1 · Field registration</div><h2>Sources and samples</h2>
-    <div class="sub">What the inspector records on board: every sample with its source, deck, location, material, photo and drawing position. A place that could not be sampled is registered too, with the reason. The code of a sample never changes once registered; every change is logged.</div>
-    ${reg.length ? `<div class="tscroll"><table><tr><th>Code</th><th>Source</th><th>Deck</th><th>Location</th><th>Part</th><th>Material</th><th>Photo</th><th>Drawing</th><th>Quantity</th><th>Status</th><th></th><th></th></tr>${rows}</table></div>`
-      : `<div class="empty">No samples registered yet.</div>`}
-    <div class="regform" id="regform">
-      <label>Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="MM-1"></label>
-      <label>Source<input id="rf-source" value="${v("source")}" placeholder="B01"></label>
-      <label>Deck<input id="rf-deck" value="${v("deck")}" placeholder="Deck 2"></label>
-      <label class="wide">Location<input id="rf-location" value="${v("location")}" placeholder="Engine room, exhaust pipe"></label>
-      <label>Part<input id="rf-part" value="${v("part")}" placeholder="Exhaust pipe"></label>
-      <label>Material<input id="rf-material" value="${v("material")}" placeholder="Insulation"></label>
-      <label>Colour / notes<input id="rf-notes" value="${v("notes")}" placeholder="white braided"></label>
-      <label>Photo<input id="rf-photo" value="${v("photo")}" placeholder="F-012"></label>
-      <label>Drawing position<input id="rf-drawing" value="${v("drawing")}" placeholder="GA-02 pos 4"></label>
-      <label>Quantity<input id="rf-quantity" value="${v("quantity")}" placeholder="12"></label>
-      <label>Unit<select id="rf-unit">${["", "kg", "m2", "m", "pcs", "l"].map(u => `<option ${ed && ed.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label>
-      <label>Status<select id="rf-status"><option value="sampled">sampled</option><option value="not sampled" ${ed && ed.status === "not sampled" ? "selected" : ""}>not sampled</option></select></label>
-      <label class="wide">Reason if not sampled<input id="rf-restriction" value="${v("restriction")}" placeholder="No access: welded hatch"></label>
+  return `<section class="panel">
+    ${panelHead("Step 1", "Sources and samples", "What the inspector records on site: every sample with its source, location, material, photo and drawing position. A place that could not be sampled is registered too, with the reason. A sample code never changes once registered; every change is logged.", `<span class="small">${reg.length} registered</span>`)}
+    <div class="panel-body">
+      ${reg.length ? `<div class="table-frame tscroll"><table><thead><tr><th>Code</th><th>Source</th><th>Deck</th><th>Location</th><th>Part</th><th>Material</th><th>Photo</th><th>Drawing</th><th>Quantity</th><th>Status</th><th><span class="sr-only">Missing</span></th><th><span class="sr-only">Edit</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty">No samples registered yet. Add the first one below.</div>`}
+      <hr class="divider">
+      <h3 style="margin-top:0">${ed ? "Edit " + esc(ed.code) : "Register a sample"}</h3>
+      <div class="regform" id="regform">
+        <label class="field">Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="MM-1"></label>
+        <label class="field">Source<input id="rf-source" value="${v("source")}" placeholder="B01"></label>
+        <label class="field">Deck<input id="rf-deck" value="${v("deck")}" placeholder="Deck 2"></label>
+        <label class="field wide">Location<input id="rf-location" value="${v("location")}" placeholder="Engine room, exhaust pipe"></label>
+        <label class="field">Part<input id="rf-part" value="${v("part")}" placeholder="Exhaust pipe"></label>
+        <label class="field">Material<input id="rf-material" value="${v("material")}" placeholder="Insulation"></label>
+        <label class="field">Colour / notes<input id="rf-notes" value="${v("notes")}" placeholder="White, braided"></label>
+        <label class="field">Photo<input id="rf-photo" value="${v("photo")}" placeholder="F-012"></label>
+        <label class="field">Drawing position<input id="rf-drawing" value="${v("drawing")}" placeholder="GA-02 pos 4"></label>
+        <label class="field">Quantity<input id="rf-quantity" value="${v("quantity")}" placeholder="12" inputmode="decimal"></label>
+        <label class="field">Unit<select id="rf-unit">${["", "kg", "m2", "m", "pcs", "l"].map(u => `<option ${ed && ed.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label>
+        <label class="field">Status<select id="rf-status"><option value="sampled">sampled</option><option value="not sampled" ${ed && ed.status === "not sampled" ? "selected" : ""}>not sampled</option></select></label>
+        <label class="field wide">Reason if not sampled<input id="rf-restriction" value="${v("restriction")}" placeholder="No access: welded hatch"></label>
+      </div>
+      <div class="actions" style="margin-top:16px"><button class="primary" id="rf-save">${ed ? "Save changes to " + esc(ed.code) : "Register sample"}</button>${ed ? `<button id="rf-cancel" class="ghost">Cancel</button>` : ""}</div>
+      ${log ? `<div class="log" style="margin-top:20px"><span class="log-title">Latest changes to the registration (${S.register_log.length} in total)</span>${log}</div>` : ""}
     </div>
-    <div class="btns"><button class="primary" id="rf-save">${ed ? "Save changes to " + esc(ed.code) : "Register sample"}</button>${ed ? `<button id="rf-cancel">Cancel</button>` : ""}</div>
-    ${log ? `<div class="log" style="margin-top:12px"><div class="note-small" style="border:0">Latest changes to the registration (${S.register_log.length} in total):</div>${log}</div>` : ""}
-  </div>`;
+  </section>`;
 }
 
 function practiceScore(r) {
   const s = r.practice_score;
   if (!s) return "";
-  if (!s.done) return `<div class="score">Practice: ${s.seeded} deliberate errors are hidden in this report. Score after every line is decided.</div>`;
+  if (!s.done) return `<div class="score">Practice: ${s.seeded} deliberate errors are hidden in this report. Your score appears when every line is decided.</div>`;
   return `<div class="score ${s.passed ? "pass" : ""}"><b>Practice result: ${s.found} of ${s.seeded} deliberate errors found</b> (target ${esc(s.target)}).
     ${s.missed.length ? "<br>Missed: " + s.missed.map(m => `line ${m.line} (${esc(m.raw_id)}) was wrongly linked to ${esc(m.seeded)}`).join("; ") : ""}</div>`;
 }
 
 function tbl(head, rows) {
-  return `<div class="tscroll"><table><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
+  return `<div class="table-frame tscroll"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
-const missing = (v) => v ? esc(v) : '<span style="color:var(--bad)">missing</span>';
+const missing = (v) => v ? esc(v) : '<span class="miss">missing</span>';
 
 function reportCard(r) {
   const m = r.ihm, signed = r.signed;
   const empty = (t) => `<div class="empty">${t}</div>`;
-  const insp = (v) => v ? esc(v) : '<span class="note-small">inspector</span>';
-  const project = tbl(["Project Information", "Details"], m.project.map(([k, v]) => [esc(k), v ? esc(v) : '<span class="note-small">–</span>']));
+  const insp = (v) => v ? esc(v) : '<span class="small">inspector</span>';
+  const project = tbl(["Project Information", "Details"], m.project.map(([k, v]) => [esc(k), v ? esc(v) : '<span class="small">–</span>']));
   const P1 = {
     "I-1": [["No.", "Application of Paint", "Name of Paints", "Location", "Materials", "Approximate Quantity", "Remarks"],
-            x => [x.no, esc(x.part), esc(x.material) + ` <span class="note-small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), insp(x.quantity), rem(x)]],
+            x => [x.no, esc(x.part), esc(x.material) + ` <span class="small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), insp(x.quantity), rem(x)]],
     "I-2": [["No.", "Name of Equipment and Machinery", "Location", "Materials", "Parts Where Used", "Approximate Quantity", "Remarks"],
-            x => [x.no, esc(x.part) + ` <span class="note-small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), esc(x.material), insp(x.quantity), rem(x)]],
+            x => [x.no, esc(x.part) + ` <span class="small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), esc(x.material), insp(x.quantity), rem(x)]],
     "I-3": [["No.", "Structural Component", "Location", "Materials", "Parts Where Used", "Approximate Quantity", "Remarks"],
-            x => [x.no, esc(x.part) + ` <span class="note-small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), esc(x.material), insp(x.quantity), rem(x)]],
+            x => [x.no, esc(x.part) + ` <span class="small">(${esc(x.sample)})</span>`, esc(x.location), mat(x), esc(x.material), insp(x.quantity), rem(x)]],
   };
   function mat(x) { return `${esc(x.materials)} <span class="pill p-${x.table === "?" ? "demo" : x.table}">Table ${esc(x.table)}</span>`; }
   function rem(x) { return esc(x.remarks) + (x.at_threshold ? ' <span class="pill p-check">confirm</span>' : ""); }
@@ -381,85 +632,89 @@ function reportCard(r) {
             ["Laboratory Certificate", missing(x.certificate)], ["Location", esc(x.location)], ["Material", esc(x.material)],
             ["Analysis Results", esc(x.result)], ["Quantity", insp(x.quantity)], ["Photo / drawing", `${missing(x.photo)} · ${missing(x.drawing)}`],
             ["Conclusions and/or Recommendations", esc(x.conclusion)]]) + `</div>`).join("") +
-      `<div class="note-small" style="margin-top:6px"><b>Laboratory Analysis Results</b></div>` +
+      `<div class="record"><b>Laboratory Analysis Results</b>` +
       tbl(["Sample Number", "Certificate Number", "Analysis Method", "Analysis Result", "Remarks", "Quantity (±)"],
-          s.lab.map(x => [esc(x.sample), missing(x.certificate), esc(x.method), esc(x.result), esc(x.remarks), insp(x.quantity)]))
+          s.lab.map(x => [esc(x.sample), missing(x.certificate), esc(x.method), esc(x.result), esc(x.remarks), insp(x.quantity)])) + `</div>`
     : empty("No approved samples in this section."))).join("");
   const lim = m.limitations.length ? tbl(["No.", "Deck Level / Area", "Location / Equipment", "Restriction / Reason", "Recommended Follow-up"],
-      m.limitations.map(x => [x.no, esc(x.deck), esc(x.location) + ` <span class="note-small">(${esc(x.sample)}, ${esc(x.material)})</span>`, esc(x.restriction), esc(x.follow_up)]))
+      m.limitations.map(x => [x.no, esc(x.deck), esc(x.location) + ` <span class="small">(${esc(x.sample)}, ${esc(x.material)})</span>`, esc(x.restriction), esc(x.follow_up)]))
     : empty("No survey limitations registered.");
   const tLines = (rows, head) => tbl(["Hazardous Material", head[0], head[1], head[2], "Samples"],
       rows.map(x => [esc(x.line), x.found ? (x.quantity !== null ? esc(x.quantity) : insp("")) : "–", x.found ? (x.unit ? esc(x.unit) : insp("")) : "–",
-                     `<span class="pill p-${x.table}">${x.table}</span>`, x.samples.length ? esc(x.samples.join(", ")) : '<span class="note-small">none found</span>']));
+                     `<span class="pill p-${x.table}">${x.table}</span>`, x.samples.length ? esc(x.samples.join(", ")) : '<span class="small">none found</span>']));
   const manual = m.manual.length ? `<h3>Needs the inspector</h3>` + m.manual.map(x => `<div class="flag"><b>${esc(x.sample)}</b><span>${esc(x.result)}: ${esc(x.note)}</span></div>`).join("") : "";
   const t = r.timing;
   const timing = t.minutes !== null ? `Processing time: <b>${t.minutes} min</b> from reading the report to the last decision (K5).` : "Processing time is measured from reading the report to the last decision (K5).";
   const sign = signed
     ? `<div class="sig"><div><span>Technical Responsible Person</span><b>${esc(signed.by)}</b></div><div><span>Date</span><b>${localTime(signed.at)}</b></div><div><span>Report status</span><b>Final</b></div></div>
-       ${signed.open_items.length ? `<div class="note-small"><b>Open items recorded at signing:</b><br>${signed.open_items.map(esc).join("<br>")}</div>` : ""}`
-    : `${r.open_items.length ? r.open_items.map(i => `<div class="flag"><b>open</b><span>${esc(i)}</span></div>`).join("") : `<div class="empty">No open items.</div>`}
-       <div class="btns"><button class="primary" id="sign" ${r.practice || r.counts.decided < r.counts.total ? "disabled" : ""}>Sign as Technical Responsible Person</button></div>
-       <div class="note-small">${r.practice ? "A practice report cannot be signed." : "In the RVL template the Technical Responsible Person signs on behalf of James; the name in the header is used. Signing needs a decision on every lab line. Open items may remain: they are recorded with the signature. After signing, decisions are locked."}</div>`;
-  return `<div class="card report-card ${signed ? "signed-final" : ""}" style="margin-top:20px">
-    <div class="report-head"><div><div class="section-tag">Step 5 · Output · approved lines only</div><h2>Inventory of Hazardous Materials · Part 1</h2>
-      <div class="sub">Laid out like the RVL IHM template. Classification, Part I list and thresholds are proposals the inspector checks.</div></div>
-      <div class="btns" style="margin:0;align-items:center"><span class="pill ${signed ? "p-approved" : "p-check"}">${signed ? "Final" : "Draft"}</span>
-        ${r.practice ? "" : `<button id="export" class="primary">Download IHM report (.odt)</button>`}</div></div>
-    <div class="note-small">The download is RVL's IHM template filled with the approved lines${signed ? "" : ", marked as DRAFT until it is signed"}. Word and LibreOffice open .odt files. Other chapters (desk research, consultation, VSCP) stay for the surveyor to write.</div>
-    <div class="note-small">${timing}</div>
-    <div class="chapter"><header><span class="no">Title page</span><h3>Project Information</h3></header>${project}</div>
-    <div class="chapter"><header><span class="no">Summary</span><h3>Summary of Identified Hazardous Materials</h3></header>${part1}</div>
-    <div class="chapter"><header><span class="no">2.3</span><h3>Visual Inspection &amp; Sample Analysis Results</h3></header>${sections}</div>
-    <div class="chapter"><header><span class="no">3</span><h3>Survey Limitations</h3></header>${lim}</div>
-    <div class="chapter"><header><span class="no">5.1</span><h3>Conclusions</h3></header>
-      <h3>Table 15 – IHM Part I, Table A: Materials Contained in Vessel Structure or Equipment</h3>${tLines(m.table_a, ["Quantity", "Unit", "IHM Table"])}
-      <h3>Table 16 – IHM Part I, Table B: Materials Contained in Vessel Structure or Equipment</h3>${tLines(m.table_b, ["Quantity (*)", "Unit (*)", "Part of IHM (Table)"])}${manual}</div>
-    <div class="chapter"><header><span class="no">Sign-off</span><h3>${signed ? "On behalf of James" : "Open items"}</h3></header>${sign}</div>
-  </div>`;
+       ${signed.open_items.length ? `<p class="small" style="margin-top:12px"><b>Open items recorded at signing:</b><br>${signed.open_items.map(esc).join("<br>")}</p>` : ""}`
+    : `${r.open_items.length ? r.open_items.map(i => `<div class="flag"><b class="muted">Open</b><span>${esc(i)}</span></div>`).join("") : `<div class="empty">No open items.</div>`}
+       <div class="actions" style="margin-top:16px"><button class="primary" id="sign" ${r.practice || r.counts.decided < r.counts.total ? "disabled" : ""}>Sign as Technical Responsible Person</button></div>
+       <p class="small" style="margin-top:8px">${r.practice ? "A practice report cannot be signed." : "In the RVL template the Technical Responsible Person signs on behalf of James; the name in the header is used. Signing needs a decision on every lab line. Open items may remain: they are recorded with the signature. After signing, decisions are locked."}</p>`;
+  return `<section class="panel report-card ${signed ? "signed-final" : ""}" style="margin-top:24px">
+    ${panelHead("Step 5 · Output · approved lines only", "Inventory of Hazardous Materials · Part 1",
+        "Laid out like the RVL IHM template. Classification, Part I list and thresholds are proposals the inspector checks. " + esc(S.thresholds_note || ""),
+        `<div class="actions"><span class="pill ${signed ? "p-approved" : "p-check"}">${signed ? "Final" : "Draft"}</span>${r.practice ? "" : `<button id="export" class="primary">Download IHM report (.odt)</button>`}</div>`)}
+    <div class="panel-body">
+      <p class="small">The download is RVL's IHM template filled with the approved lines${signed ? "" : ", marked as DRAFT until it is signed"}. Word and LibreOffice open .odt files. Other chapters (desk research, consultation, VSCP) stay for the surveyor to write.</p>
+      <p class="small" style="margin-top:4px">${timing}</p>
+      <div class="chapter"><header><span class="no">Title page</span><h3>Project Information</h3></header>${project}</div>
+      <div class="chapter"><header><span class="no">Summary</span><h3>Summary of Identified Hazardous Materials</h3></header>${part1}</div>
+      <div class="chapter"><header><span class="no">2.3</span><h3>Visual Inspection &amp; Sample Analysis Results</h3></header>${sections}</div>
+      <div class="chapter"><header><span class="no">3</span><h3>Survey Limitations</h3></header>${lim}</div>
+      <div class="chapter"><header><span class="no">5.1</span><h3>Conclusions</h3></header>
+        <h3>Table 15 – IHM Part I, Table A: Materials Contained in Vessel Structure or Equipment</h3>${tLines(m.table_a, ["Quantity", "Unit", "IHM Table"])}
+        <h3>Table 16 – IHM Part I, Table B: Materials Contained in Vessel Structure or Equipment</h3>${tLines(m.table_b, ["Quantity (*)", "Unit (*)", "Part of IHM (Table)"])}${manual}</div>
+      <div class="chapter"><header><span class="no">Sign-off</span><h3>${signed ? "On behalf of James" : "Open items"}</h3></header>${sign}</div>
+    </div>
+  </section>`;
 }
 
-function history() {
+function historyTable() {
   const a = S.asset, keys = Object.keys(a.samples);
   if (!keys.length) return `<div class="empty">Nothing saved yet (version 0).</div>`;
   const rows = [];
   for (const k of keys) for (const h of a.samples[k].history)
-    rows.push(`<tr><td>${esc(k)}</td><td>v${h.version}</td><td class="${h.changed ? "chg" : ""}">${esc(h.result)}${h.changed ? " ← result changed" : ""}</td><td>${esc(h.approved_by)}</td></tr>`);
-  return `<table><tr><th>Sample</th><th>Version</th><th>Result</th><th>Approved by</th></tr>${rows.join("")}</table>`;
+    rows.push(`<tr><td class="code">${esc(k)}</td><td>v${h.version}</td><td class="${h.changed ? "chg" : ""}">${esc(h.result)}${h.changed ? " ← result changed" : ""}</td><td>${esc(h.approved_by)}</td></tr>`);
+  return `<div class="table-frame tscroll"><table class="hist"><thead><tr><th>Sample</th><th>Version</th><th>Result</th><th>Approved by</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
 }
 
 function prop(x, flags) {
   const p = x.proposal, d = x.decision, ch = x.chain;
+  const node = (label, value, warn) => `<div class="node ${warn ? "warn" : ""}"><span>${label}</span>${value}</div>`;
   const chain = ch ? `<div class="chain">
-      <div class="node"><span>Sample</span><b>${esc(ch.sample)}</b></div><div class="arrow">→</div>
-      <div class="node"><span>Source</span>${esc(ch.source || "–")}</div><div class="arrow">→</div>
-      <div class="node"><span>Location</span>${esc([ch.deck, ch.location].filter(Boolean).join(" › "))}</div><div class="arrow">→</div>
-      <div class="node"><span>Ship</span>${esc(ch.ship)}</div>
-      <div class="node ${ch.photo ? "" : "warn"}"><span>Photo</span>${ch.photo ? esc(ch.photo) : "missing"}</div>
-      <div class="node ${x.certificate ? "" : "warn"}"><span>Certificate</span>${x.certificate ? esc(x.certificate) : "missing"}</div></div>`
-    : `<div class="chain"><div class="node"><span>Sample</span>?</div><div class="arrow">→</div><div class="node"><span>Source</span>?</div><div class="arrow">→</div><div class="node"><span>Location</span>?</div></div>`;
+      ${node("Sample", `<b>${esc(ch.sample)}</b>`)}${node("Source", esc(ch.source || "–"))}
+      ${node("Location", esc([ch.deck, ch.location].filter(Boolean).join(" › ") || "–"))}${node("Object", esc(ch.ship))}
+      ${node("Photo", ch.photo ? esc(ch.photo) : "missing", !ch.photo)}${node("Certificate", x.certificate ? esc(x.certificate) : "missing", !x.certificate)}</div>`
+    : `<div class="chain">${node("Sample", "?")}${node("Source", "?")}${node("Location", "?")}</div>`;
   const checks = x.checks.length ? `<div class="checks">${x.checks.map(k => `<span class="${k.ok ? "y" : "n"}">${esc(k.text)}</span>`).join("")}</div>` : "";
-  const finds = x.findings.map(f => `<div class="finding">${f.table ? `<span class="pill p-${f.table === "?" ? "demo" : f.table}">Table ${esc(f.table)}</span> ` : ""}${esc(f.name)}: <b>${STATUS[f.status]}</b>${f.note ? " · " + esc(f.note) : ""}</div>`).join("");
-  const fl = (flags || []).filter(f => f.kind !== "unknown" || !d).map(f => `<div class="lineflag">⚑ ${esc(f.text)}</div>`).join("");
+  const finds = x.findings.map(f => `<div class="finding">${f.table ? `<span class="pill p-${f.table === "?" ? "demo" : f.table}">Table ${esc(f.table)}</span>` : ""}<span>${esc(f.name)}: <b>${STATUS[f.status]}</b>${f.note ? ` <span class="muted">· ${esc(f.note)}</span>` : ""}</span></div>`).join("");
+  const fl = (flags || []).filter(f => f.kind !== "unknown" || !d).map(f => `<div class="lineflag">${esc(f.text)}</div>`).join("");
   const opts = S.register.filter(s => s.status !== "not sampled").map(s => `<option value="${esc(s.code)}">${esc(s.code)} · ${esc(s.material)}</option>`).join("");
-  const signed = d ? `<div class="signed">${d.state === "rejected" ? "Rejected (no link)" : "Linked to " + esc(d.sample) + " (" + d.state + ")"} by <b>${esc(d.by)}</b> at ${localTime(d.at)}${d.note ? " · " + esc(d.note) : ""}</div>` : "";
+  const signed = d ? `<div class="signed">${d.state === "rejected" ? "Rejected (no link)" : "Linked to <b>" + esc(d.sample) + "</b> (" + d.state + ")"} by ${esc(d.by)} at ${localTime(d.at)}${d.note ? ` <span class="muted">· ${esc(d.note)}</span>` : ""}</div>` : "";
   const locked = !!S.report.signed;
-  return `<div class="prop ${p.label} ${d ? "decided" : ""}" data-idx="${x.idx}">
-    <div class="prop-head"><div><b>${esc(x.raw_id || "no ID")}</b> · ${esc(x.result)} <span class="note-small">${esc(x.method)}</span><span class="src">${esc(SRC[p.source] || p.source)}</span></div>
-      <span class="pill p-${p.label}">${LABEL[p.label]}${p.sample ? " → " + esc(p.sample) : ""}</span></div>
+  return `<article class="prop ${p.label} ${d ? "decided" : ""}" data-idx="${x.idx}">
+    <div class="prop-head">
+      <div class="prop-title"><span class="prop-code">${esc(x.raw_id || "No ID")}</span><span class="prop-result">${esc(x.result)}</span>
+        <div class="prop-meta">${x.method ? esc(x.method) + " · " : ""}<span class="src">${esc(SRC[p.source] || p.source)}</span></div></div>
+      <span class="pill p-${p.label}">${LABEL[p.label]}${p.sample ? " → " + esc(p.sample) : ""}</span>
+    </div>
     ${fl}
     ${chain}
     <div class="reason">${esc(p.reason)}</div>
     ${finds}
     ${checks}
     ${signed}
-    ${!locked && d && !reopened.has(x.idx) ? `<div class="act"><button data-reopen="1">Change decision</button></div>` : ""}
+    ${!locked && d && !reopened.has(x.idx) ? `<div class="act"><button data-reopen="1" class="ghost">Change decision</button></div>` : ""}
     ${locked || (d && !reopened.has(x.idx)) ? "" : `<div class="act">
-      <button class="approve" data-act="approve" ${p.sample ? "" : "disabled"}>Approve</button>
-      <select class="pick-sample"><option value="">link to another sample…</option>${opts}</select>
+      <button class="approve" data-act="approve" ${p.sample ? "" : "disabled"}>Approve${p.sample ? " " + esc(p.sample) : ""}</button>
+      <label class="sr-only" for="pick-${x.idx}">Link to another sample</label>
+      <select class="pick-sample" id="pick-${x.idx}"><option value="">Link to another sample…</option>${opts}</select>
       <button data-act="correct">Link here</button>
-      <input class="note" placeholder="Note (why)">
-      <button class="reject" data-act="reject">Reject (no link)</button>
-    </div>`}</div>`;
+      <label class="sr-only" for="note-${x.idx}">Note</label>
+      <input class="note" id="note-${x.idx}" placeholder="Note (why)">
+      <button class="reject" data-act="reject">Reject</button>
+    </div>`}</article>`;
 }
 
 function wire() {
@@ -476,7 +731,7 @@ function wire() {
   document.querySelectorAll("[data-demo]").forEach(b => b.onclick = () => post("/api/demo", { which: b.dataset.demo }));
   const pick = $("#pick"); if (pick) pick.onchange = () => load(Number(pick.value));
   const reread = $("#reread"); if (reread) reread.onclick = () => post("/api/reread", { report_id: currentReport });
-  const reset = $("#reset"); if (reset) reset.onclick = () => { if (confirm("Reset everything to the start?")) post("/api/reset", {}); };
+  const reset = $("#reset"); if (reset) reset.onclick = () => { if (confirm("Reset everything to the start? This removes all projects, reports and decisions in this session.")) post("/api/reset", {}); };
   const op = $("#open-paste"); if (op) op.onclick = () => $("#paste").showModal();
   const pr = $("#practice"); if (pr) pr.onclick = () => post("/api/practice", {});
   const up = $("#upload"); if (up) up.onchange = () => uploadPdf(up.files[0]);
@@ -496,13 +751,18 @@ function wire() {
   });
 }
 async function downloadReport(rid) {
-  const res = await fetch("/api/export?report=" + rid);
-  if (!res.ok) { const d = await res.json().catch(() => ({})); return toast(d.error || "The report could not be made."); }
-  const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(await res.blob()); a.download = name ? name[1] : "IHM_report.odt";
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  pending++; document.documentElement.classList.add("is-busy");
+  try {
+    const res = await fetch("/api/export?report=" + rid);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); return toast(d.error || "The report could not be made."); }
+    const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await res.blob()); a.download = name ? name[1] : "IHM_report.odt";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } finally {
+    if (--pending === 0) document.documentElement.classList.remove("is-busy");
+  }
   load(rid);
 }
 function uploadPdf(file) {
@@ -517,11 +777,6 @@ function needName() {
   const i = $("#inspector"); if (i) i.focus();
   return true;
 }
-$("#np-cancel").onclick = () => $("#newproj").close();
-$("#np-ok").onclick = async () => {
-  const f = {}; ["name", "ref", "kind", "site", "project"].forEach(k => f[k] = $("#np-" + k).value); f.survey_date = $("#np-date").value;
-  try { await post("/api/project", f); $("#newproj").close(); } catch (e) {}
-};
 $("#np-cancel").onclick = () => $("#newproj").close();
 $("#np-ok").onclick = async () => {
   const f = { survey_date: $("#np-date").value };
