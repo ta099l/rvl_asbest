@@ -63,6 +63,90 @@ TABLE_LINES = [
 ]
 BATTERY = re.compile(r"batter", re.I)
 
+# ---------- Substance groups for the fieldwork tabs ----------
+# The ONE mapping from a sample code to its group. Each prefix (in RVL's standard notation, after the
+# linker's ALIASES: M -> MM, ZM -> HM, PAC -> PAH, CH6 -> CR6) names a substance key, and the section
+# comes from section_2_3, the same function the export uses, so a tab and the report never disagree.
+# prefix: (group, substance key or None, meaning)
+PREFIX_GROUP = {
+    "MM": ("asbestos", "asbestos", "asbestos, bulk sample"),
+    "KM": ("asbestos", "asbestos", "asbestos, dust sample"),
+    "PBS": ("pcb", "pcb", "PCB, bulk sample"),
+    "SS": ("pcb", "pcb", "PCB, swipe sample"),
+    "OS": ("pcb", "pcb", "PCB, oil sample"),
+    "ODS": ("ods", "ods", "ozone depleting substances"),
+    "PFOS": ("pfos", "pfos", "PFOS"),
+    "PFAS": ("pfos", "pfos", "PFAS: reported under 2.3.4 PFOS until Rolf decides (question 17)"),
+    "HBCDD": ("hbcdd", "hbcdd", "HBCDD"),
+    "HM": ("metals", "pb", "heavy metals (zware metalen; older notation ZM)"),
+    "CR6": ("metals", "cr6", "chromium-6 (older notation CH6)"),
+    "NORM": ("radio", "radio", "naturally occurring radioactive material"),
+    "PAH": ("other", "pah", "PAH (Dutch PAK; older notation PAC)"),
+    "TBT": ("other", "tbt", "organotin, anti-fouling (Table A-4)"),
+    "TPH": ("other", None, "total petroleum hydrocarbons"),
+    "VOC": ("other", None, "volatile organic compounds"),
+    "VI": ("other", None, "visual inspection, no lab sample"),
+    "V": ("other", None, "visual registration, no lab sample (older notation, to check: Rolf question 14)"),
+    "DR": ("other", None, "document review, no lab sample"),
+    "EI": ("other", None, "equipment identification, no lab sample"),
+}
+# The tabs, in order: (group, label, main prefix for a new sample, always shown)
+GROUPS = [
+    ("asbestos", "Asbestos", "MM", True),
+    ("pcb", "PCB", "PBS", True),
+    ("metals", "Heavy metals", "HM", True),
+    ("ods", "ODS", "ODS", False),
+    ("pfos", "PFOS / PFAS", "PFOS", False),
+    ("hbcdd", "HBCDD", "HBCDD", False),
+    ("radio", "Radioactive", "NORM", False),
+    ("other", "Other", None, False),
+]
+GROUP_LABEL = {g: label for g, label, _, _ in GROUPS}
+
+
+def _std_parts(code: str):
+    """(prefix as written, standard prefix, number) or None. Parsing and aliases are the linker's own."""
+    from ai.james_ai.linker import code_parts, std_prefix
+    cp = code_parts(code or "")
+    return (cp[0], std_prefix(cp[0]), int(cp[1])) if cp else None
+
+
+def group_for_code(code: str) -> dict:
+    """Which fieldwork tab and report section a sample code belongs to.
+
+    A code whose prefix is not in PREFIX_GROUP goes to Other WITH a warning ('unknown'): a typo such
+    as MI02 must not silently disappear from the asbestos tab. VI, DR, EI and V are known codes for an
+    assessment without a lab sample, so they go to Other without a warning.
+    """
+    parts = _std_parts(code)
+    known = parts and parts[1] in PREFIX_GROUP
+    group, key, meaning = PREFIX_GROUP[parts[1]] if known else ("other", None, "")
+    return {"key": group, "label": GROUP_LABEL[group], "section": section_2_3(key),
+            "prefix": parts[1] if parts else "", "meaning": meaning, "unknown": not known}
+
+
+def group_section(group: str) -> str:
+    """The report section of a group, from its main prefix (Other: 2.3.x)."""
+    main = next(m for g, _, m, _ in GROUPS if g == group)
+    return section_2_3(PREFIX_GROUP[main][1] if main else None)
+
+
+def next_code(codes: List[str], group: str) -> Optional[str]:
+    """The next free code for a new sample in a group, in the style the project already uses:
+    M03 after M02, PBS04 after PBS03, MM-6 after MM-5. An empty group starts with RVL's standard
+    form (MM-1). Other has no main prefix, so the inspector types the code."""
+    main = next(m for g, _, m, _ in GROUPS if g == group)
+    if not main:
+        return None
+    same = [(p[2], c.strip()) for c in codes for p in [_std_parts(c)] if p and p[1] == main]
+    if not same:
+        return f"{main}-1"
+    n, last = max(same)
+    m = re.match(r"^(.*?)(\d+)$", last)
+    digits = m.group(2)
+    width = len(digits) if digits.startswith("0") and len(digits) > 1 else 1
+    return m.group(1) + str(n + 1).zfill(width)
+
 
 def section_2_3(key: Optional[str]) -> str:
     return next(no for no, _, keys in SECTIONS_2_3 if key in keys)

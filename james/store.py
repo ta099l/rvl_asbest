@@ -27,6 +27,10 @@ EDITABLE = ("source", "location", "part", "material", "notes", "photo", "deck", 
 # Project Information fields of the RVL IHM template, besides name, type, location, project number and date.
 PROJECT_INFO = ("client", "client_address", "owner", "owner_address", "surveyor", "technical_responsible",
                 "project_coordinator", "survey_period")
+# Columns of the object table that the intake page may change.
+OBJECT_FIELDS = ("name", "kind", "ref", "site", "project", "survey_date")
+# register_log code for a change to the project details (not a sample, so no report goes out of date).
+PROJECT_LOG_CODE = "(project)"
 
 
 def check_sample(s: Sample) -> None:
@@ -119,6 +123,29 @@ class Store:
     def objects(self) -> List[sqlite3.Row]:
         return self.db.execute("SELECT * FROM object ORDER BY id").fetchall()
 
+    def update_object(self, object_id: int, changes: Dict[str, str], by: str) -> None:
+        """Change the project details (intake page). Logged old -> new under PROJECT_LOG_CODE, so the
+        report keeps a trace of who changed what; it does not mark lab reports out of date."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        row = self.object(object_id)
+        if row is None:
+            raise ValueError("unknown project")
+        bad = set(changes) - set(OBJECT_FIELDS) - set(PROJECT_INFO)
+        if bad:
+            raise ValueError("these fields cannot be changed: " + ", ".join(sorted(bad)))
+        old = {k: row[k] or "" for k in OBJECT_FIELDS} | self.project_info(object_id)
+        new = old | {k: (v or "").strip() for k, v in changes.items()}
+        if not new["name"] or not new["project"] or not new["site"]:
+            raise ValueError("a project needs a name, a project number and a survey location")
+        diffs = [f"{k}: {old[k] or '–'} -> {new[k] or '–'}" for k in (*OBJECT_FIELDS, *PROJECT_INFO) if old[k] != new[k]]
+        if not diffs:
+            return
+        with self.db:
+            self.db.execute("UPDATE object SET " + ", ".join(f"{k}=?" for k in OBJECT_FIELDS) + ", info=? WHERE id=?",
+                            [new[k] for k in OBJECT_FIELDS] + [json.dumps({k: new[k] for k in PROJECT_INFO}), object_id])
+            self._log_register(object_id, PROJECT_LOG_CODE, "changed", "; ".join(diffs), by)
+
     # ---------- field registration ----------
     def add_sample(self, object_id: int, s: Sample, by: str) -> None:
         """Register one sample (or a place that could not be sampled). Logged with name and time."""
@@ -174,7 +201,8 @@ class Store:
         return self.db.execute("SELECT * FROM register_log WHERE object_id=? ORDER BY id", (object_id,)).fetchall()
 
     def register_changed_at(self, object_id: int) -> Optional[str]:
-        r = self.db.execute("SELECT MAX(changed_at) m FROM register_log WHERE object_id=?", (object_id,)).fetchone()
+        r = self.db.execute("SELECT MAX(changed_at) m FROM register_log WHERE object_id=? AND code<>?",
+                            (object_id, PROJECT_LOG_CODE)).fetchone()
         return r["m"]
 
     def sampled(self, object_id: int) -> List[Sample]:

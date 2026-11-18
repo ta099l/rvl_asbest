@@ -41,11 +41,12 @@ from ai.james_ai.contract import ContractError          # noqa: E402
 from app import export_odt                              # noqa: E402
 from app.auth import COOKIE, LOGIN_PAGE, SESSION_SECONDS, Auth, parse_users  # noqa: E402
 from app.demo_data import SHIP                          # noqa: E402
-from app.ihm import (PART_I, SECTIONS_2_3, TABLE_LINES, findings, load_thresholds,  # noqa: E402
-                     part_i, sample_type, section_2_3, sum_quantities, table_line)
+from app.ihm import (GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_for_code,  # noqa: E402
+                     group_section, load_thresholds, next_code, part_i, sample_type, section_2_3,
+                     sum_quantities, table_line)
 from ai.james_ai.hybrid import HybridRun, hybrid        # noqa: E402
 from ai.james_ai.linker import Sample                   # noqa: E402
-from james.store import EDITABLE, PROJECT_INFO, Store   # noqa: E402
+from james.store import EDITABLE, OBJECT_FIELDS, PROJECT_INFO, Store   # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 DEMO_REPLAY = ROOT / "ai" / "replays" / "demo_ship.json"
@@ -113,34 +114,56 @@ class Service:
             if known is None:
                 self.load_demo("b1")
 
+    def oid(self, object_id=None) -> int:
+        """The project a request is about. The browser sends it with every request (from its URL), so two
+        windows on two projects never affect each other. Without one, the last opened project is used:
+        a fallback for old callers and the tests."""
+        if object_id in (None, ""):
+            return self.object_id
+        try:
+            oid = int(object_id)
+        except (TypeError, ValueError):
+            raise ValueError("unknown project")
+        if self.store.object(oid) is None:
+            raise ValueError("unknown project")
+        return oid
+
+    def report_object(self, rid: int) -> int:
+        """The project a lab report belongs to: sign, export and history follow the report, not the screen."""
+        row = self.store.db.execute("SELECT object_id FROM lab_report WHERE id=?", (rid,)).fetchone()
+        if row is None:
+            raise ValueError("unknown report")
+        return row["object_id"]
+
     def log(self, report_id: int, text: str) -> None:
         self.agent_log.append({"at": now(), "report_id": report_id, "by": "Agent", "text": text})
 
     # ---------- reports ----------
-    def load_demo(self, key: str) -> int:
+    def load_demo(self, key: str, object_id=None) -> int:
         with self.lock:
             if key not in SHIP["reports"]:
                 raise ValueError("unknown demo report")
-            if self.object_id != self.demo_object:
+            if self.oid(object_id) != self.demo_object:
                 raise ValueError("the demo reports belong to the demo ship; switch to it first, or paste or upload a report")
             rep = SHIP["reports"][key]
-            return self.ingest(rep["label"], rep["text"], source_file="demo report (built in)", read_method="demo text")
+            return self.ingest(rep["label"], rep["text"], source_file="demo report (built in)", read_method="demo text",
+                               object_id=self.demo_object)
 
     def ingest(self, label: str, text: str, source_file: str = "pasted text", read_method: str = "pasted text",
-               sha256: Optional[str] = None) -> int:
+               sha256: Optional[str] = None, object_id=None) -> int:
         """Store a lab report with its evidence (where it came from, its fingerprint, how it was read)."""
         with self.lock:
             if not text or not text.strip():
                 raise ValueError("the lab report text is empty")
             evidence = {"source_file": source_file, "read_method": read_method, "linker_version": LINKER_VERSION,
                         "source_sha256": sha256 or hashlib.sha256(text.encode("utf-8")).hexdigest()}
-            rid = self.store.ingest_report(self.object_id, label.strip() or "Lab report", text, evidence)
+            rid = self.store.ingest_report(self.oid(object_id), label.strip() or "Lab report", text, evidence)
             if not self.store.rows(rid):
                 raise ValueError("no lab lines found: put the lines after a line with ---")
             self.read(rid)
             return rid
 
-    def ingest_pdf(self, label: str, pdf: bytes) -> int:
+    def ingest_pdf(self, label: str, pdf: bytes, object_id=None) -> int:
         """Read a lab report PDF with the extractor, then handle it like pasted text."""
         from james.extract import extract_lab_text
         with self.lock, tempfile.TemporaryDirectory() as tmp:
@@ -154,7 +177,7 @@ class Service:
                 raise ValueError("no lab table found in the PDF. " + " ".join(ex.notes))
             rid = self.ingest(label or "Uploaded PDF", ex.text, source_file=label or "uploaded.pdf",
                               read_method={"text": "PDF text layer", "ocr": "PDF via OCR", "mixed": "PDF, text layer and OCR"}.get(ex.method, ex.method),
-                              sha256=hashlib.sha256(pdf).hexdigest())
+                              sha256=hashlib.sha256(pdf).hexdigest(), object_id=object_id)
             for n in ex.notes:
                 self.log(rid, n)
             self.log(rid, f"PDF read ({ex.pages} page(s), method: {ex.method}).")
@@ -212,12 +235,19 @@ class Service:
             self.log(rid, "Read again with the current field registration.")
 
     # ---------- projects and field registration ----------
-    def new_project(self, f: dict) -> None:
+    def new_project(self, f: dict) -> int:
         with self.lock:
             self.object_id = self.store.add_object((f.get("name") or "").strip(), (f.get("kind") or "").strip(),
                                                    (f.get("ref") or "").strip(), (f.get("site") or "").strip(),
                                                    (f.get("project") or "").strip(), [], (f.get("survey_date") or "").strip(),
                                                    {k: (f.get(k) or "").strip() for k in PROJECT_INFO})
+            return self.object_id
+
+    def update_project(self, f: dict, by: str, object_id=None) -> None:
+        """Save the intake page: the project details, logged old -> new."""
+        with self.lock:
+            changes = {k: f[k] for k in (*OBJECT_FIELDS, *PROJECT_INFO) if k in f}
+            self.store.update_object(self.oid(object_id), changes, by)
 
     def select_object(self, oid: int) -> None:
         with self.lock:
@@ -225,29 +255,29 @@ class Service:
                 raise ValueError("unknown project")
             self.object_id = oid
 
-    def add_sample(self, f: dict, by: str) -> None:
+    def add_sample(self, f: dict, by: str, object_id=None) -> None:
         with self.lock:
             fields = {k: (f.get(k) or "").strip() for k in EDITABLE}
             fields["status"] = fields["status"] or "sampled"
-            self.store.add_sample(self.object_id, Sample(id=(f.get("code") or "").strip(), **fields), by)
+            self.store.add_sample(self.oid(object_id), Sample(id=(f.get("code") or "").strip(), **fields), by)
 
-    def update_sample(self, code: str, f: dict, by: str) -> None:
+    def update_sample(self, code: str, f: dict, by: str, object_id=None) -> None:
         with self.lock:
-            self.store.update_sample(self.object_id, code, {k: f[k] for k in EDITABLE if k in f}, by)
+            self.store.update_sample(self.oid(object_id), code, {k: f[k] for k in EDITABLE if k in f}, by)
 
     # ---------- practice review (TC12 / K10) ----------
-    def load_practice(self) -> int:
+    def load_practice(self, object_id=None) -> int:
         """Load demo report 1 with wrong links seeded in, to measure whether the reviewer really checks.
 
         The seeded proposals look like any other proposal. The score is shown only
         after every line is decided. A practice report never reaches the history or sign-off.
         """
         with self.lock:
-            if self.object_id != self.demo_object:
+            if self.oid(object_id) != self.demo_object:
                 raise ValueError("the practice review uses the demo ship; switch to it first")
             rep = SHIP["reports"]["b1"]
             rid = self.ingest("Practice review (contains deliberate errors)", rep["text"],
-                              source_file="demo report (built in)", read_method="demo text")
+                              source_file="demo report (built in)", read_method="demo text", object_id=self.demo_object)
             props = self.runs[rid].response["proposals"]
             chosen = [i for i, p in enumerate(props) if p["sample"]][:PRACTICE_ERRORS]
             if len(chosen) < 2:
@@ -319,7 +349,7 @@ class Service:
                 raise ValueError("a practice report cannot be signed")
             if self.store.signoff(rid):
                 raise ValueError("this report is already signed")
-            view = self.report_view(rid, self.store.register(self.object_id))
+            view = self.report_view(rid, self.store.register(self.report_object(rid)))
             self.store.sign(rid, by, view["open_items"])
             self.log(rid, f"Signed by {by.strip()} as Technical Responsible Person. Report status: Final.")
 
@@ -330,7 +360,7 @@ class Service:
                 raise ValueError("unknown report")
             if self.is_practice(rid):
                 raise ValueError("a practice report cannot be exported")
-            view = self.report_view(rid, self.store.register(self.object_id))
+            view = self.report_view(rid, self.store.register(self.report_object(rid)))
             data = export_odt.export(view)
             project = re.sub(r"[^A-Za-z0-9-]+", "_", dict(view["ihm"]["project"])["Project Number"] or "project")
             self.log(rid, f"IHM report exported to the RVL template ({'final' if view['signed'] else 'draft'}).")
@@ -342,40 +372,61 @@ class Service:
                 raise ValueError("enter the inspector name first")
             if self.is_practice(rid):
                 raise ValueError("a practice report never goes into the ship's history")
-            v = self.store.save_asset_version(self.object_id, rid, by.strip())
+            v = self.store.save_asset_version(self.report_object(rid), rid, by.strip())
             return v
 
     # ---------- view for the screen ----------
-    def view(self, rid: Optional[int] = None) -> dict:
+    def view(self, rid: Optional[int] = None, object_id=None) -> dict:
+        """Everything the screen shows for one project. A report of another project is never shown in it."""
         with self.lock:
+            oid = self.oid(object_id)
             reports = [dict(r) for r in self.store.db.execute(
                 "SELECT id,label,report_ref,lab,ingested_at FROM lab_report WHERE object_id=? ORDER BY id",
-                (self.object_id,))]
+                (oid,))]
             for r in reports:
                 r["practice"] = self.is_practice(r["id"])
-            obj = dict(self.store.object(self.object_id))
-            obj["demo"] = self.object_id == self.demo_object
-            reg = self.store.register(self.object_id)
+            obj = dict(self.store.object(oid))
+            obj["demo"] = oid == self.demo_object
+            obj["info"] = self.store.project_info(oid)
+            reg = self.store.register(oid)
+            # lab lines without a decision, over every report of this project (badge on the Lab results tab)
+            open_lines = self.store.db.execute(
+                "SELECT COUNT(*) FROM lab_row r JOIN lab_report l ON l.id = r.report_id WHERE l.object_id=? "
+                "AND NOT EXISTS (SELECT 1 FROM decision d WHERE d.lab_row_id = r.id)", (oid,)).fetchone()[0]
             out = {"object": obj,
                    "objects": [{"id": o["id"], "name": o["name"], "project": o["project"]} for o in self.store.objects()],
                    "register": [{"code": s.id, "source": s.source, "location": s.location, "part": s.part,
                                  "material": s.material, "notes": s.notes, "photo": s.photo, "deck": s.deck,
                                  "status": s.status, "restriction": s.restriction, "drawing": s.drawing,
-                                 "quantity": s.quantity, "unit": s.unit,
+                                 "quantity": s.quantity, "unit": s.unit, "group": group_for_code(s.id),
                                  "missing": [n for n, v in (("source", s.source), ("deck", s.deck), ("photo", s.photo),
                                                             ("drawing", s.drawing)) if not v and s.status == "sampled"]}
                                 for s in reg],
                    "register_log": [{"at": e["changed_at"], "by": e["changed_by"], "code": e["code"],
                                      "action": e["action"], "detail": e["detail"]}
-                                    for e in self.store.register_log(self.object_id)],
-                   "reports": reports, "report": None,
-                   "asset": self.store.asset(self.object_id),
+                                    for e in self.store.register_log(oid)],
+                   "reports": reports, "report": None, "open_lines": open_lines,
+                   "groups": self.groups_view(reg),
+                   "asset": self.store.asset(oid),
                    "thresholds_note": "Thresholds: to confirm by RVL (app/thresholds.json)."}
             if not reports:
                 return out
             rid = rid if rid in [r["id"] for r in reports] else reports[-1]["id"]
             out["report"] = self.report_view(rid, reg)
             return out
+
+    @staticmethod
+    def groups_view(reg) -> List[dict]:
+        """The fieldwork tabs: every substance group with its report section, how many samples it
+        holds, and the next free code. The screen keeps no copy of this mapping."""
+        codes = [s.id for s in reg]
+        out = []
+        for key, label, main, always in GROUPS:
+            mine = [c for c in codes if group_for_code(c)["key"] == key]
+            out.append({"key": key, "label": label, "section": group_section(key), "always": always,
+                        "count": len(mine), "unknown": sum(group_for_code(c)["unknown"] for c in mine),
+                        "next_code": next_code(codes, key)})
+        return out
 
     def report_view(self, rid: int, reg) -> dict:
         run = self.run_for(rid)
@@ -639,8 +690,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def send_view(self, rid, user: str) -> None:
-        out = SERVICE.view(rid)
+    def send_view(self, rid, user: str, object_id=None) -> None:
+        out = SERVICE.view(rid, object_id)
         out["me"] = user
         out["login"] = AUTH.enabled
         self.send_json(out)
@@ -687,7 +738,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/state":
             q = dict(kv.split("=", 1) for kv in self.path.partition("?")[2].split("&") if "=" in kv)
             rid = int(q["report"]) if q.get("report", "").isdigit() else None
-            self.send_view(rid, user)
+            try:
+                self.send_view(rid, user, q.get("object") or None)
+            except ValueError as e:
+                self.send_json({"error": str(e)}, 400)
         else:
             self.send_json({"error": "not found"}, 404)
 
@@ -725,48 +779,56 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "login required"}, 401)
             if user:
                 body["by"] = user          # with login, the signature is always the logged-in name
+            oid = body.get("object")                 # the project this browser tab shows (from its URL)
             if path == "/api/reset":
                 SERVICE.reset()
-                rid = None
+                rid, oid = None, SERVICE.demo_object
             elif path == "/api/demo":
-                rid = SERVICE.load_demo(body.get("which", "b1"))
+                rid = SERVICE.load_demo(body.get("which", "b1"), oid)
             elif path == "/api/report":
-                rid = SERVICE.ingest(body.get("label", ""), body.get("text", ""))
+                rid = SERVICE.ingest(body.get("label", ""), body.get("text", ""), object_id=oid)
             elif path == "/api/reread":
                 rid = int(body["report_id"])
                 SERVICE.reread(rid)
+                oid = SERVICE.report_object(rid)
             elif path == "/api/project":
-                SERVICE.new_project(body)
+                oid = SERVICE.new_project(body)
                 rid = None
-            elif path == "/api/select-project":
+            elif path == "/api/project-update":
+                SERVICE.update_project(body, body.get("by", ""), oid)
+                rid = body.get("report_id")
+            elif path == "/api/select-project":          # old callers: the screen now keeps the project in its URL
                 SERVICE.select_object(int(body["object_id"]))
-                rid = None
+                rid, oid = None, int(body["object_id"])
             elif path == "/api/sample":
-                SERVICE.add_sample(body, body.get("by", ""))
+                SERVICE.add_sample(body, body.get("by", ""), oid)
                 rid = body.get("report_id")
             elif path == "/api/sample-update":
-                SERVICE.update_sample(body.get("code", ""), body, body.get("by", ""))
+                SERVICE.update_sample(body.get("code", ""), body, body.get("by", ""), oid)
                 rid = body.get("report_id")
             elif path == "/api/decide":
                 rid = int(body["report_id"])
                 SERVICE.decide(rid, int(body["idx"]), body.get("action", ""), body.get("by", ""),
                                body.get("sample"), (body.get("note") or "").strip())
+                oid = SERVICE.report_object(rid)
             elif path == "/api/save-history":
                 rid = int(body["report_id"])
                 SERVICE.save_history(rid, body.get("by", ""))
+                oid = SERVICE.report_object(rid)
             elif path == "/api/sign":
                 rid = int(body["report_id"])
                 SERVICE.sign(rid, body.get("by", ""))
+                oid = SERVICE.report_object(rid)
             elif path == "/api/practice":
-                rid = SERVICE.load_practice()
+                rid = SERVICE.load_practice(oid)
             elif path == "/api/upload-pdf":
                 data = base64.b64decode(body.get("pdf_base64", ""), validate=True)
                 if len(data) > 20 * 1024 * 1024:
                     raise ValueError("the PDF is larger than 20 MB")
-                rid = SERVICE.ingest_pdf(body.get("label", ""), data)
+                rid = SERVICE.ingest_pdf(body.get("label", ""), data, oid)
             else:
                 return self.send_json({"error": "not found"}, 404)
-            self.send_view(rid, user)
+            self.send_view(rid, user, oid)
         except (ValueError, KeyError, TypeError, json.JSONDecodeError, binascii.Error) as e:
             self.send_json({"error": str(e)}, 400)
 

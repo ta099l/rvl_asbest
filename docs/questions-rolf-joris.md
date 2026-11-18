@@ -35,3 +35,5 @@ Still open: 2, 3, 4, 5, 7, 8, 10 (which AI tool), 11–14, and:
 |---|---|---|---|
 | 15 | Which substance does the older code `ZM` stand for? | It must stay recognisable, but we cannot map it without knowing what it means. | Alias table |
 | 16 | Do VI, DR and EI codes ever appear on a lab certificate, or only in the field registration? | They are assessment methods without a lab analysis. | Linker, TC08 |
+| 17 | Do PFAS samples belong under section 2.3.4 PFOS, or do you report them separately? | PFOS is one kind of PFAS. The tool now shows PFAS in a tab labelled "PFOS / PFAS" and the export puts it under 2.3.4, the only section the template has. Moving it is one line in `app/ihm.py` (`PREFIX_GROUP`). | Fieldwork tabs, export 2.3.4 |
+| 18 | For new asbestos samples: `M00` or `MM00`? Your list (6 Nov) gives `MM-1` as the standard and marks `M00` "to check". | The tool supports both: M and MM are the same group, and "Add sample" continues the style the project already uses (M03 after M02, MM-6 after MM-5). An empty project starts with `MM-1`. | Fieldwork "Add sample" |

@@ -115,7 +115,9 @@
   @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
   @media (prefers-reduced-motion: reduce) { .progress::after { animation: none; width: 100%; } }
 
-  .topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .sticky-head { position: sticky; top: 0; z-index: 20; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); }
+  a.brand { color: inherit; text-decoration: none; }
   .topbar-inner { display: flex; align-items: center; gap: var(--s-4); min-height: 56px; flex-wrap: wrap; padding-top: var(--s-2); padding-bottom: var(--s-2); }
   .brand { display: flex; align-items: center; gap: var(--s-2); font-weight: 600; }
   .brand-mark { width: 24px; height: 24px; border-radius: var(--r-sm); background: var(--brand); color: var(--on-brand);
@@ -176,7 +178,7 @@
   .boot { padding: 120px var(--s-5); text-align: center; color: var(--text-2); }
 
   /* ---------- Tables ---------- */
-  .tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; position: relative; }  /* relative: hidden labels stay inside, not widen the page */
   table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   th { text-align: left; font-weight: 500; font-size: var(--fs-xs); color: var(--text-2); padding: var(--s-2) var(--s-3);
        border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
@@ -281,6 +283,31 @@
            font-size: var(--fs-sm); border-left: 3px solid var(--bad); }
 
   /* ---------- Responsive ---------- */
+  /* ---------- Tabs (one page per step of the work) ---------- */
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .tabs-inner { display: flex; gap: var(--s-1); overflow-x: auto; scrollbar-width: thin; }
+  .tab { display: inline-flex; align-items: center; gap: 6px; padding: 10px var(--s-3); white-space: nowrap; font-size: var(--fs-sm);
+         font-weight: 500; color: var(--text-2); text-decoration: none; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-current="page"] { color: var(--text); border-bottom-color: var(--brand); }
+  .badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+           background: var(--warn-soft); color: var(--warn); font-size: var(--fs-xs); font-weight: 600; }
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-4); margin-bottom: var(--s-5); }
+  .status { display: grid; gap: 2px; align-content: start; padding: var(--s-4); background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-md); color: var(--text); text-decoration: none; }
+  .status:hover { border-color: var(--border-strong); }
+  .status.done { box-shadow: inset 3px 0 0 var(--ok); }
+  .status.open { box-shadow: inset 3px 0 0 var(--warn); }
+  .status.todo b { color: var(--text-3); font-weight: 500; }
+  details.fold > summary { padding: var(--s-4) var(--s-5); cursor: pointer; font-weight: 600; }
+  details.fold[open] > summary { padding-bottom: var(--s-3); }
+  .btn-link { font-size: var(--fs-sm); font-weight: 500; }
+  .fw-tabs { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: var(--s-2) 0 var(--s-3); }
+  .fw-tabs .spacer { flex: 1; }
+  .fw-tab[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--text); }
+  .fw-tab .count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+                   background: var(--surface-2); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
+
   @media (max-width: 1100px) {
     .layout { grid-template-columns: minmax(0, 1fr); }
     .regform { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -394,20 +421,141 @@ function toast(msg) {
   setTimeout(() => d.remove(), 6000);
 }
 function localTime(ts) { return new Date(ts.replace(" ", "T") + "Z").toLocaleTimeString("en-GB"); }
-async function load(report) {
-  const q = report ? "?report=" + report : "";
+
+// ---------- Where am I: the part of the URL after # is the single source of truth ----------
+// #/projects  or  #/p/<object id>/<page>[/<report id>]. The open project lives in the URL of this
+// browser tab, so two windows can work on two projects, and back, forward and refresh just work.
+const PAGES = [["dashboard", "Dashboard"], ["upload", "Upload"], ["intake", "Intake"], ["desk-research", "Desk research"],
+               ["fieldwork", "Fieldwork"], ["lab", "Lab results"], ["bronbladen", "Bronbladen"], ["report", "Report"]];
+const WITH_REPORT = ["lab", "report"];       // pages that may name a lab report in the URL
+let route = { page: "projects", oid: null, rid: null };
+let loadSeq = 0;                             // only the newest page load may draw
+
+function parseRoute(hash) {
+  const p = (hash || "").replace(/^#\/?/, "").split("/").filter(Boolean);
+  if (p.length === 1 && p[0] === "projects") return { page: "projects", oid: null, rid: null };
+  if (p[0] !== "p" || !/^\d+$/.test(p[1] || "") || !PAGES.some(([id]) => id === p[2])) return null;
+  if (p.length === 3) return { page: p[2], oid: +p[1], rid: null };
+  if (p.length === 4 && WITH_REPORT.includes(p[2]) && /^\d+$/.test(p[3])) return { page: p[2], oid: +p[1], rid: +p[3] };
+  return null;
+}
+function href(page, oid = route.oid, rid = null) {
+  if (page === "projects" || !oid) return "#/projects";
+  return `#/p/${oid}/${page}` + (WITH_REPORT.includes(page) && rid ? "/" + rid : "");
+}
+function go(hash) { if (location.hash === hash) onRoute(); else location.hash = hash; }
+
+async function onRoute() {
+  const r = parseRoute(location.hash);
+  if (!r) { history.replaceState(null, "", "#/projects"); return onRoute(); }      // unknown route
+  saveDrafts();
+  if (r.oid !== route.oid) { editCode = null; reopened.clear(); }
+  else if (r.rid !== route.rid) reopened.clear();
+  route = r;
+  if (await load()) window.scrollTo(0, 0);    // a new page starts at the top, on purpose
+}
+async function load() {
+  const seq = ++loadSeq;
+  const q = [route.oid ? "object=" + route.oid : "", route.rid ? "report=" + route.rid : ""].filter(Boolean).join("&");
+  let data;
   try {
-    S = await api("/api/state" + q);
+    data = await api("/api/state" + (q ? "?" + q : ""));
   } catch (e) {
+    if (seq !== loadSeq) return false;
+    if (route.oid && /unknown project/.test(e.message)) { history.replaceState(null, "", "#/projects"); onRoute(); return false; }
     if (!S) $("#app").innerHTML = `<div class="boot" role="alert"><h2>James could not be reached</h2>
       <p class="muted" style="margin-top:8px">Check that the server is running, then reload this page.</p>
       <p style="margin-top:16px"><button class="primary" onclick="location.reload()">Reload</button></p></div>`;
-    return;
+    return false;
   }
-  currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render();
+  if (seq !== loadSeq) return false;
+  accept(data);
+  draw();
+  return true;
 }
-async function post(path, body) { S = await api(path, body); currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me; render(); }
+// Fetch the same page again and redraw it in place (after a download, for example).
+async function refresh() {
+  const q = [route.oid ? "object=" + route.oid : "", route.rid ? "report=" + route.rid : ""].filter(Boolean).join("&");
+  try { accept(await api("/api/state" + (q ? "?" + q : ""))); update(); } catch (e) {}
+}
+function accept(data) {
+  S = data; currentReport = S.report ? S.report.id : null; if (S.me) inspector = S.me;
+  // keep the open report in the URL, so a refresh shows the same one (replaceState: no new history entry)
+  if (route.oid && WITH_REPORT.includes(route.page) && currentReport && route.rid !== currentReport) {
+    route.rid = currentReport;
+    history.replaceState(null, "", href(route.page, route.oid, currentReport));
+  }
+}
+// Every action names its project (and report); the answer is the new state of that project.
+// opts.to: go to that page afterwards; opts.anchor: keep that element where it was on screen;
+// opts.clear: form fields to empty after success; opts.top: redraw the top bar too.
+async function post(path, body, opts = {}) {
+  const data = await api(path, { object: route.oid, report_id: currentReport, ...body });
+  if (opts.onOk) opts.onOk(data);
+  if (opts.to) {
+    S = data;
+    go(href(opts.to, data.object.id, data.report ? data.report.id : null));
+    return data;
+  }
+  accept(data);
+  update(opts);
+  return data;
+}
 async function logout() { try { await fetch("/api/logout", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" }); } catch (e) {} location.href = "/login"; }
+
+// ---------- Unsent form text: kept per project page while you click around or switch tabs ----------
+const draftStore = {};
+const DRAFT = /^(rf-|in-|note-|pick-\d)/;
+const draftKey = () => route.oid ? route.oid + "/" + route.page : null;
+function changed(el) {
+  if (el.tagName === "SELECT") return el.value !== ([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value;
+  return el.value !== el.defaultValue;
+}
+function saveDrafts() {
+  const key = draftKey(); if (!key || !$("#page")) return;
+  const d = draftStore[key] = {};
+  document.querySelectorAll("#page input[id], #page select[id], #page textarea[id]").forEach(el => {
+    if (DRAFT.test(el.id) && el.type !== "file" && !el.disabled && changed(el)) d[el.id] = el.value;
+  });
+}
+function clearDrafts(ids) {       // "rf-" (ending in -) empties a whole form; "note-3" one field
+  const d = draftStore[draftKey()]; if (!d) return;
+  Object.keys(d).forEach(k => { if (ids.some(p => k === p || (p.endsWith("-") && k.startsWith(p)))) delete d[k]; });
+}
+function restoreDrafts() {
+  for (const [id, v] of Object.entries(draftStore[draftKey()] || {})) {
+    const el = document.getElementById(id); if (el && !el.disabled) el.value = v;
+  }
+}
+
+// ---------- Drawing: top bar and tabs once per page, the page itself after every action ----------
+function draw() {
+  if (!$("#page")) $("#app").innerHTML = `<div class="sticky-head"><div id="top"></div><div id="tabs"></div></div><main class="container" id="page"></main>`;
+  drawTop(); drawTabs(); drawPage();
+}
+function drawTop() { $("#top").innerHTML = topbar(); wireTop(); }
+function drawTabs() { $("#tabs").innerHTML = route.oid ? tabs() : ""; }
+function drawPage() {
+  const p = VIEWS[route.page], r = S.report;
+  const callout = r && r.practice && WITH_REPORT.includes(route.page)
+    ? `<div class="callout practice"><b>Practice review.</b> Some proposals in this report are deliberately wrong. Review as you normally would; your score shows when every line is decided. Nothing here reaches the history or a signed report.</div>` : "";
+  $("#page").innerHTML = callout + p.view();
+  p.wire();
+  restoreDrafts();
+}
+// After an action on the same page: redraw only the page (and the tab badge), keep the scroll
+// position, the focused field and unsent form text.
+function update(opts = {}) {
+  const y = window.scrollY, active = document.activeElement && document.activeElement.id;
+  const anchor = opts.anchor ? $(opts.anchor) : null, before = anchor ? anchor.getBoundingClientRect().top : null;
+  saveDrafts(); clearDrafts(opts.clear || []);
+  if (opts.top) drawTop();
+  drawTabs(); drawPage();
+  const after = opts.anchor ? $(opts.anchor) : null;
+  if (after && before !== null) window.scrollTo(0, window.scrollY + after.getBoundingClientRect().top - before);
+  else window.scrollTo(0, y);
+  if (active && active !== "inspector") { const el = document.getElementById(active); if (el) el.focus({ preventScroll: true }); }
+}
 
 const LABEL = { certain: "Certain", check: "Check", none: "No link" };
 const SRC = { rules: "rules", both: "rules + AI agree", ai: "AI only", disagree: "rules and AI disagree", guard: "guard: sample used twice",
@@ -418,58 +566,214 @@ function panelHead(step, title, desc, aside) {
   return `<div class="panel-head"><div>${step ? `<div class="eyebrow">${step}</div>` : ""}<h2>${title}</h2>${desc ? `<p class="panel-desc">${desc}</p>` : ""}</div>${aside || ""}</div>`;
 }
 
-function render() {
-  const o = S.object, r = S.report;
-  const done = r ? r.counts.decided === r.counts.total : false;
-  const nreg = S.register.length;
-  const stepNow = !nreg ? 1 : !r ? 2 : r.signed ? 6 : done ? 5 : 4;
-  const sub = [`${nreg} sample${nreg === 1 ? "" : "s"} registered`, r ? `${esc(r.ref || r.label)} · ${r.counts.total} lines` : "No report yet",
-               r ? `${r.counts.certain} certain · ${r.counts.check} check · ${r.counts.none} no link` : "–",
-               r ? `${r.counts.decided} / ${r.counts.total} decided` : "–", r && r.signed ? "Signed by " + esc(r.signed.by) : r && r.practice ? "Practice: no sign-off" : "Draft"];
-  const steps = ["Field registration", "Lab report read", "Agent proposes links", "Inspector decides", "Signed result"]
-    .map((t, i) => {
-      const state = i + 1 < stepNow ? "done" : i + 1 === stepNow ? "now" : "";
-      return `<li class="${state}" ${state === "now" ? 'aria-current="step"' : ""}><span class="num">${state === "done" ? "✓" : i + 1}</span><div style="min-width:0"><span class="t">${t}</span><span class="d">${sub[i]}</span></div></li>`;
-    }).join("");
+function topbar() {
   const user = S.login
     ? `<span>Signed in as <b>${esc(S.me)}</b></span><button id="logout" class="ghost">Log out</button>`
     : `<label for="inspector">Inspector</label><input id="inspector" class="${inspector ? "" : "need"}" placeholder="Your name (signs every decision)" value="${esc(inspector)}" autocomplete="name">`;
-  $("#app").innerHTML = `
-    <header class="topbar">
+  return `<header class="topbar">
       <div class="container topbar-inner">
-        <div class="brand"><span class="brand-mark" aria-hidden="true">J</span>James <span class="brand-sub">IHM lab agent</span></div>
+        <a class="brand" href="#/projects"><span class="brand-mark" aria-hidden="true">J</span>James <span class="brand-sub">IHM lab agent</span></a>
         <span class="topbar-divider" aria-hidden="true"></span>
         <div class="topbar-project">
           <label for="objpick" class="sr-only">Project</label>
-          <select id="objpick">${S.objects.map(x => `<option value="${x.id}" ${x.id === o.id ? "selected" : ""}>${esc(x.project)} · ${esc(x.name)}</option>`).join("")}</select>
+          <select id="objpick"><option value="" ${route.oid ? "" : "selected"}>All projects…</option>${S.objects.map(x => `<option value="${x.id}" ${x.id === route.oid ? "selected" : ""}>${esc(x.project)} · ${esc(x.name)}</option>`).join("")}</select>
           <button id="new-project">New project</button>
         </div>
         <div class="topbar-user">${user}</div>
       </div>
     </header>
-    <div class="notice"><div class="container">Concept prototype · fictitious data only · the agent proposes, the inspector decides.</div></div>
-    <main class="container">
-      ${r && r.practice ? `<div class="callout practice"><b>Practice review.</b> Some proposals in this report are deliberately wrong. Review as you normally would; your score shows when every line is decided. Nothing here reaches the history or a signed report.</div>` : ""}
-      <div class="page-head">
-        <div><div class="crumb">Project ${esc(o.project)}</div><h1>${esc(o.name)}</h1></div>
-        <dl class="meta">
-          <div><dt>Object code</dt><dd>${esc(o.ref || "–")}</dd></div>
-          <div><dt>Type</dt><dd>${esc(o.kind || "–")}</dd></div>
-          <div><dt>Survey location</dt><dd>${esc(o.site || "–")}</dd></div>
-          <div><dt>Survey date</dt><dd>${esc(o.survey_date || "–")}</dd></div>
-        </dl>
-      </div>
-      <ol class="stepper" aria-label="Progress">${steps}</ol>
-      ${registration()}
-      ${r ? screen(r) : `<section class="panel">${panelHead("Step 2", "Lab report", "Upload or paste the lab report for this project. The agent reads every line and proposes a link per result.")}
-          <div class="panel-body"><div class="empty">No lab report yet for this project.${nreg ? "" : " Register the samples first, so the agent has something to link to."}</div></div>
-          <div class="panel-foot">${buttons(null)}</div></section>`}
-    </main>`;
+    <div class="notice"><div class="container">Concept prototype · fictitious data only · the agent proposes, the inspector decides.</div></div>`;
+}
+function wireTop() {
+  const op = $("#objpick"); if (op) op.onchange = () => go(op.value ? href("dashboard", +op.value) : "#/projects");
+  const np = $("#new-project"); if (np) np.onclick = () => $("#newproj").showModal();
   const inp = $("#inspector");
   if (inp) inp.addEventListener("input", () => { inspector = inp.value; inp.classList.toggle("need", !inspector.trim()); });
   const lo = $("#logout"); if (lo) lo.onclick = logout;
-  wire();
 }
+function tabs() {
+  const n = S.open_lines || 0;
+  return `<nav class="tabs" aria-label="Project pages"><div class="container tabs-inner">${PAGES.map(([id, t]) =>
+    `<a class="tab" href="${href(id, route.oid, currentReport)}" ${id === route.page ? 'aria-current="page"' : ""}>${t}${id === "lab" && n
+      ? ` <span class="badge" title="${n} lab line${n === 1 ? "" : "s"} without a decision, over all reports">${n}<span class="sr-only"> open</span></span>` : ""}</a>`).join("")}</div></nav>`;
+}
+
+// ---------- The pages ----------
+function pageHead(title, desc, aside) {
+  const o = S.object;
+  return `<div class="page-head"><div><div class="crumb">Project ${esc(o.project)} · ${esc(o.name)}</div><h1>${title}</h1>${desc ? `<p class="panel-desc">${desc}</p>` : ""}</div>${aside || ""}</div>`;
+}
+function placeholder(title, desc, text) {
+  return pageHead(title, desc) + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="empty">${text}</div></div></section>`;
+}
+
+function projectsPage() {
+  const rows = S.objects.map(x => `<tr><td class="code">${esc(x.project)}</td><td><a href="${href("dashboard", x.id)}">${esc(x.name)}</a></td>
+      <td style="text-align:right"><a class="btn-link" href="${href("dashboard", x.id)}">Open</a></td></tr>`).join("");
+  return `<div class="page-head"><div><div class="crumb">James</div><h1>Projects</h1></div>
+      <div class="actions"><button class="primary" id="new-project-2">New project</button></div></div>
+    <section class="panel"><div class="panel-body" style="padding-top:var(--s-4)">${S.objects.length
+      ? `<div class="table-frame tscroll"><table><thead><tr><th>Project number</th><th>Object</th><th><span class="sr-only">Open</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="empty">No projects yet. Start with "New project".</div>`}</div></section>`;
+}
+function wireProjects() { const b = $("#new-project-2"); if (b) b.onclick = () => $("#newproj").showModal(); }
+
+const INTAKE = [["name", "Object name", true], ["project", "RVL project number", true], ["site", "Survey location", true],
+  ["ref", "Object code / IMO number"], ["kind", "Type"], ["survey_date", "Survey date"], ["survey_period", "Survey period"],
+  ["client", "Client"], ["client_address", "Client address"], ["owner", "Owner"], ["owner_address", "Owner address"],
+  ["surveyor", "Survey conducted by"], ["technical_responsible", "Technical Responsible Person"], ["project_coordinator", "Project coordinator"]];
+const intakeValue = (k) => { const o = S.object; return (k in o && k !== "info" ? o[k] : (o.info || {})[k]) || ""; };
+const PROJECT_LOG = "(project)";
+
+function dashboardPage() {
+  const o = S.object, r = S.report, reg = S.register, n = S.open_lines || 0;
+  const filled = INTAKE.filter(([k]) => intakeValue(k)).length, gaps = reg.filter(s => s.missing.length).length;
+  const unknownCodes = reg.filter(s => s.group && s.group.unknown).length;
+  const cards = [
+    ["upload", "Not built yet", "One place for photos, reports and the intake form. Lab reports are uploaded on Lab results for now.", "todo"],
+    ["intake", `${filled} of ${INTAKE.length} fields filled`, "Project details for the title page of the report.", filled === INTAKE.length ? "done" : "open"],
+    ["desk-research", "Not built yet", "Drawings and documents of the object.", "todo"],
+    ["fieldwork", `${reg.length} sample${reg.length === 1 ? "" : "s"} registered`, !reg.length ? "Register the samples from site"
+      : [unknownCodes ? `${unknownCodes} with an unknown code` : "", gaps ? `${gaps} with missing fields` : "No missing fields"].filter(Boolean).join(" · "),
+      reg.length && !gaps && !unknownCodes ? "done" : "open"],
+    ["lab", `${S.reports.length} lab report${S.reports.length === 1 ? "" : "s"}`, !S.reports.length ? "No lab report yet" : n ? `${n} line${n === 1 ? "" : "s"} without a decision` : "Every line decided", S.reports.length && !n ? "done" : "open"],
+    ["bronbladen", "Not built yet", "One source sheet per source: photos, sample, location and certificate.", "todo"],
+    ["report", r ? (r.signed ? "Final (signed)" : "Draft") : "No report yet", r ? `${esc(r.ref || r.label)}: ${r.counts.decided} of ${r.counts.total} lines decided` : "Needs a lab report first", r && r.signed ? "done" : "open"],
+  ].map(([id, value, detail, state]) => `<a class="status ${state}" href="${href(id, o.id, currentReport)}">
+      <span class="eyebrow">${PAGES.find(p => p[0] === id)[1]}</span><b>${value}</b><span class="small">${detail}</span></a>`).join("");
+  const c = r ? r.counts : null;
+  return `<div class="page-head">
+      <div><div class="crumb">Project ${esc(o.project)}</div><h1>${esc(o.name)}</h1></div>
+      <dl class="meta">
+        <div><dt>Object code</dt><dd>${esc(o.ref || "–")}</dd></div>
+        <div><dt>Type</dt><dd>${esc(o.kind || "–")}</dd></div>
+        <div><dt>Survey location</dt><dd>${esc(o.site || "–")}</dd></div>
+        <div><dt>Survey date</dt><dd>${esc(o.survey_date || "–")}</dd></div>
+      </dl>
+    </div>
+    <div class="status-grid">${cards}</div>
+    <details class="panel fold">
+      <summary>History of this object <span class="small">· approved results saved per version, so the next survey can compare</span></summary>
+      <div class="panel-body">${historyTable()}</div>
+      <div class="panel-foot"><button id="save-history" ${c && c.linked && !r.practice ? "" : "disabled"}>Save approved lines${r ? " of " + esc(r.ref || r.label) : ""} to the history</button></div>
+    </details>
+    <details class="panel fold">
+      <summary>Audit log <span class="small">· ${r ? esc(r.ref || r.label) + ", every action with a time, append-only" : "no lab report yet"}</span></summary>
+      <div class="panel-body"><div class="log">${r && r.audit.length ? r.audit.map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.text)}</span></div>`).join("") : `<div class="empty">Nothing logged yet.</div>`}</div></div>
+    </details>`;
+}
+function wireDashboard() {
+  const sh = $("#save-history"); if (sh) sh.onclick = () => { if (needName()) return; post("/api/save-history", { report_id: currentReport, by: inspector }).catch(() => {}); };
+}
+
+function intakePage() {
+  const field = ([k, label, req]) => `<label class="field">${label}${req ? ' <span class="req">required</span>' : ""}<input id="in-${k}" value="${esc(intakeValue(k))}"></label>`;
+  const log = S.register_log.filter(e => e.code === PROJECT_LOG).slice(-5).reverse()
+    .map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.detail)}</span></div>`).join("");
+  return pageHead("Intake", "The project details on the title page of the IHM report. Every change is signed and logged.") +
+    `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">
+      <div class="form-grid">${INTAKE.slice(0, 7).map(field).join("")}
+        <div class="form-section">Client and owner</div>${INTAKE.slice(7, 11).map(field).join("")}
+        <div class="form-section">People</div>${INTAKE.slice(11).map(field).join("")}</div>
+      <div class="actions" style="margin-top:16px"><button class="primary" id="in-save">Save intake</button></div>
+      ${log ? `<div class="log" style="margin-top:20px"><span class="log-title">Latest changes to the project details</span>${log}</div>` : ""}
+    </div></section>`;
+}
+function wireIntake() {
+  const b = $("#in-save"); if (!b) return;
+  b.onclick = () => {
+    if (needName()) return;
+    const f = { by: inspector }; INTAKE.forEach(([k]) => f[k] = $("#in-" + k).value);
+    post("/api/project-update", f, { clear: ["in-"], top: true }).then(() => toast("Intake saved.")).catch(() => {});
+  };
+}
+
+function fieldworkPage() { return pageHead("Fieldwork", "Sources and samples as recorded on site.") + registration(); }
+function wireFieldwork() {
+  document.querySelectorAll("[data-fw-tab]").forEach(b => b.onclick = () => {
+    fw().tab = b.dataset.fwTab; update({ clear: ["rf-code"] });      // the code field takes the new tab's next code
+  });
+  const ag = $("#fw-add-group"); if (ag) ag.onchange = () => {
+    if (!ag.value) return;
+    const st = fw(); st.extra.add(ag.value); st.tab = ag.value; update({ clear: ["rf-code"] });
+  };
+  const as = $("#fw-add-sample"); if (as) as.onclick = () => {
+    if (editCode) { editCode = null; update({ clear: ["rf-"] }); }
+    $("#regform").scrollIntoView({ block: "center" });
+    const loc = $("#rf-location"); if (loc) loc.focus({ preventScroll: true });
+  };
+  document.querySelectorAll(".edit-sample").forEach(b => b.onclick = () => {
+    editCode = b.dataset.code; update({ clear: ["rf-"] }); $("#regform").scrollIntoView({ block: "center" });
+  });
+  const rc = $("#rf-cancel"); if (rc) rc.onclick = () => { editCode = null; update({ clear: ["rf-"] }); };
+  const rs = $("#rf-save"); if (rs) rs.onclick = () => {
+    if (needName()) return;
+    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "photo", "drawing", "quantity", "unit", "status", "restriction"].forEach(k => f[k] = $("#rf-" + k).value);
+    const path = editCode ? "/api/sample-update" : "/api/sample";
+    const code = (editCode || f.code).trim();
+    post(path, { ...f, code, by: inspector }, { clear: ["rf-"], onOk: data => {
+      editCode = null;
+      const saved = data.register.find(x => x.code === code);
+      if (saved) fw().tab = saved.group.key;            // show the sample in the tab its code belongs to
+    } }).catch(() => {});
+  };
+}
+
+function labPage() {
+  const r = S.report;
+  return pageHead("Lab results", "Steps 2 to 4: the lab report as it arrived, the agent's proposals and your decisions.") +
+    (r ? screen(r) : `<section class="panel">${panelHead("Step 2", "Lab report", "Upload or paste the lab report for this project. The agent reads every line and proposes a link per result.")}
+        <div class="panel-body"><div class="empty">No lab report yet for this project.${S.register.length ? "" : ` Register the samples on <a href="${href("fieldwork")}">Fieldwork</a> first, so the agent has something to link to.`}</div></div>
+        <div class="panel-foot">${buttons(null)}</div></section>`);
+}
+function wireLab() {
+  const toLab = { to: "lab" };
+  document.querySelectorAll("[data-demo]").forEach(b => b.onclick = () => post("/api/demo", { which: b.dataset.demo }, toLab).catch(() => {}));
+  wirePick("lab");
+  const reread = $("#reread"); if (reread) reread.onclick = () => post("/api/reread", { report_id: currentReport }).catch(() => {});
+  const reset = $("#reset"); if (reset) reset.onclick = () => { if (confirm("Reset everything to the start? This removes all projects, reports and decisions in this session.")) post("/api/reset", {}, { to: "dashboard" }).catch(() => {}); };
+  const op = $("#open-paste"); if (op) op.onclick = () => $("#paste").showModal();
+  const pr = $("#practice"); if (pr) pr.onclick = () => post("/api/practice", {}, toLab).catch(() => {});
+  const up = $("#upload"); if (up) up.onchange = () => uploadPdf(up.files[0]);
+  document.querySelectorAll(".prop").forEach(box => {
+    const idx = Number(box.dataset.idx), anchor = `.prop[data-idx="${idx}"]`;
+    const ro = box.querySelector("[data-reopen]");
+    if (ro) ro.onclick = () => { reopened.add(idx); update({ anchor }); };
+    box.querySelectorAll("[data-act]").forEach(btn => btn.onclick = () => {
+      if (needName()) return;
+      const act = btn.dataset.act, sample = box.querySelector(".pick-sample").value, note = box.querySelector(".note").value;
+      if (act === "correct" && !sample) return toast("Choose the sample to link to first.");
+      post("/api/decide", { report_id: currentReport, idx, action: act, by: inspector, sample, note },
+           { anchor, clear: ["note-" + idx, "pick-" + idx], onOk: () => reopened.delete(idx) }).catch(() => {});
+    });
+  });
+}
+function wirePick(page) { const pick = $("#pick"); if (pick) pick.onchange = () => go(href(page, route.oid, +pick.value)); }
+
+function reportPage() {
+  const r = S.report;
+  if (!r) return placeholder("Report", "", `No lab report yet. Read one on <a href="${href("lab")}">Lab results</a> first.`);
+  const pick = S.reports.length > 1 ? `<div class="actions"><label for="pick" class="sr-only">Lab report</label><select id="pick">${S.reports.map(x =>
+    `<option value="${x.id}" ${x.id === r.id ? "selected" : ""}>${esc(x.label)}${x.report_ref && !x.label.includes(x.report_ref) ? " · " + esc(x.report_ref) : ""}</option>`).join("")}</select></div>` : "";
+  return pageHead("Report", "The IHM report built from the approved lines, sign-off and download.", pick) + reportCard(r);
+}
+function wireReport() {
+  wirePick("report");
+  const ex = $("#export"); if (ex) ex.onclick = () => downloadReport(currentReport);
+  const sg = $("#sign"); if (sg) sg.onclick = () => { if (needName()) return; post("/api/sign", { report_id: currentReport, by: inspector }).catch(() => {}); };
+}
+
+const VIEWS = {
+  projects: { view: projectsPage, wire: wireProjects },
+  dashboard: { view: dashboardPage, wire: wireDashboard },
+  upload: { view: () => placeholder("Upload", "", `Coming next: one place to upload photos, reports and the intake form. For now, upload a lab report on <a href="${href("lab")}">Lab results</a>.`), wire: () => {} },
+  intake: { view: intakePage, wire: wireIntake },
+  "desk-research": { view: () => placeholder("Desk research", "", "Coming later: drawings and documents of the object."), wire: () => {} },
+  fieldwork: { view: fieldworkPage, wire: wireFieldwork },
+  lab: { view: labPage, wire: wireLab },
+  bronbladen: { view: () => placeholder("Bronbladen", "", "Coming next: one source sheet per source, with photos, sample number, location and certificate number."), wire: () => {} },
+  report: { view: reportPage, wire: wireReport },
+};
 
 function buttons(r) {
   const tabs = S.reports.length > 1
@@ -499,7 +803,7 @@ function screen(r) {
   const lineFlags = {}; r.flags.forEach(f => { if (f.line) (lineFlags[f.line] = lineFlags[f.line] || []).push(f); });
   const otherFlags = r.flags.filter(f => !f.line);
   return `
-  <div class="layout" style="margin-top:24px">
+  <div class="layout">
     <div class="stack">
       <section class="panel">
         ${panelHead("Step 2 · Input", `${esc(r.lab || "Lab report")}${r.ref ? ` <span class="muted" style="font-weight:400">· ${esc(r.ref)}</span>` : ""}`, "As it arrives from the lab. The agent reads every line.")}
@@ -530,18 +834,6 @@ function screen(r) {
         ${certain.length ? `<div class="group-h"><b>Certain links</b><span>Exact ID and the description agrees — still your decision</span></div>${certain.map(x => prop(x, lineFlags[x.n])).join("")}` : ""}
       </div>
     </section>
-  </div>
-  ${reportCard(r)}
-  <div class="layout" style="margin-top:24px">
-    <section class="panel">
-      ${panelHead("Object history", "History of this object", "Approved results are saved per version, so the next survey can compare.")}
-      <div class="panel-body">${historyTable()}</div>
-      <div class="panel-foot"><button id="save-history" ${c.linked && !r.practice ? "" : "disabled"}>Save approved lines to the history</button></div>
-    </section>
-    <section class="panel">
-      ${panelHead("Traceability", "Audit log", "Every action by the agent and the inspector, with a time. Append-only.")}
-      <div class="panel-body"><div class="log">${r.audit.length ? r.audit.map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.text)}</span></div>`).join("") : `<div class="empty">Nothing logged yet.</div>`}</div></div>
-    </section>
   </div>`;
 }
 
@@ -556,23 +848,42 @@ function evidence(e) {
 }
 
 let editCode = null;      // the sample being edited in the registration form, or null for a new one
+// Fieldwork tabs per project: the open group and groups shown with "Add group" (this browser tab only).
+// Which group a sample belongs to comes from the server (S.register[].group, S.groups): no mapping here.
+const fwState = {};
+const fw = () => fwState[route.oid] = fwState[route.oid] || { tab: "asbestos", extra: new Set() };
 function registration() {
-  const reg = S.register, ed = editCode ? reg.find(s => s.code === editCode) : null;
-  const v = (k) => esc(ed ? ed[k] : "");
-  const rows = reg.map(s => `<tr class="${s.status === "not sampled" ? "ns" : ""}">
-      <td class="code">${esc(s.code)}</td><td>${esc(s.source)}</td><td>${esc(s.deck)}</td><td>${esc(s.location)}</td><td>${esc(s.part)}</td>
+  const reg = S.register, ed = editCode ? reg.find(s => s.code === editCode) : null, st = fw();
+  const shown = S.groups.filter(g => g.always || g.count || st.extra.has(g.key) || g.key === st.tab);
+  const cur = S.groups.find(g => g.key === st.tab) || S.groups[0];
+  const hidden = S.groups.filter(g => !shown.includes(g));
+  const unknown = reg.filter(s => s.group.unknown);
+  const v = (k) => esc(ed ? ed[k] : k === "code" ? cur.next_code || "" : "");
+  const tabsHtml = `<div class="fw-tabs" aria-label="Substance groups">${shown.map(g => `<button class="fw-tab" data-fw-tab="${g.key}" aria-pressed="${g.key === cur.key}"
+        title="Report section ${esc(g.section)}">${esc(g.label)} <span class="count">${g.count}</span>${g.unknown ? ` <span class="pill p-check">${g.unknown} unknown</span>` : ""}</button>`).join("")}
+      ${hidden.length ? `<label for="fw-add-group" class="sr-only">Add group</label><select id="fw-add-group"><option value="">Add group…</option>${hidden.map(g => `<option value="${g.key}">${esc(g.label)}</option>`).join("")}</select>` : ""}
+      <span class="spacer"></span><button id="fw-add-sample">Add ${cur.key === "other" ? "a" : esc(cur.label)} sample</button></div>`;
+  const warn = unknown.length ? `<div class="callout warn"><b>${unknown.length === 1 ? "1 sample has a code" : unknown.length + " samples have a code"} James does not know:</b>
+      ${unknown.map(s => esc(s.code)).join(", ")}. ${unknown.length === 1 ? "It is" : "They are"} under Other, not in a substance group. Check for a typo (for example MI02 for M02).
+      ${cur.key === "other" ? "" : `<button class="ghost" data-fw-tab="other">Show in Other</button>`}</div>` : "";
+  const rows = reg.filter(s => s.group.key === cur.key).map(s => `<tr class="${s.status === "not sampled" ? "ns" : ""}">
+      <td class="code" title="${esc(s.group.meaning || "Not in the code list")}">${esc(s.code)}${s.group.unknown ? `<div><span class="pill p-check">unknown code</span></div>` : ""}</td><td>${esc(s.source)}</td><td>${esc(s.deck)}</td><td>${esc(s.location)}</td><td>${esc(s.part)}</td>
       <td>${esc(s.material)}${s.notes ? `<div class="small">${esc(s.notes)}</div>` : ""}</td><td>${esc(s.photo)}</td><td>${esc(s.drawing)}</td><td>${esc([s.quantity, s.unit].filter(Boolean).join(" "))}</td>
       <td>${s.status === "not sampled" ? `<span class="pill p-demo">not sampled</span><div class="small">${esc(s.restriction)}</div>` : '<span class="small">sampled</span>'}</td>
       <td class="miss small">${s.missing.length ? "Missing: " + s.missing.join(", ") : ""}</td>
       <td><button class="edit-sample ghost" data-code="${esc(s.code)}">Edit</button></td></tr>`).join("");
-  const log = S.register_log.slice(-5).reverse().map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.code)} ${esc(e.action)}: ${esc(e.detail)}</span></div>`).join("");
+  const regLog = S.register_log.filter(e => e.code !== PROJECT_LOG);     // project details show on Intake
+  const log = regLog.slice(-5).reverse().map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.code)} ${esc(e.action)}: ${esc(e.detail)}</span></div>`).join("");
   return `<section class="panel">
-    ${panelHead("Step 1", "Sources and samples", "What the inspector records on site: every sample with its source, location, material, photo and drawing position. A place that could not be sampled is registered too, with the reason. A sample code never changes once registered; every change is logged.", `<span class="small">${reg.length} registered</span>`)}
+    ${panelHead("Step 1", "Sources and samples", "What the inspector records on site: every sample with its source, location, material, photo and drawing position. A place that could not be sampled is registered too, with the reason. A sample code never changes once registered; every change is logged. The tabs are views on one register: the code decides the tab, and the tab matches the section of the IHM report.", `<span class="small">${reg.length} registered</span>`)}
     <div class="panel-body">
-      ${reg.length ? `<div class="table-frame tscroll"><table><thead><tr><th>Code</th><th>Source</th><th>Deck</th><th>Location</th><th>Part</th><th>Material</th><th>Photo</th><th>Drawing</th><th>Quantity</th><th>Status</th><th><span class="sr-only">Missing</span></th><th><span class="sr-only">Edit</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<div class="empty">No samples registered yet. Add the first one below.</div>`}
+      ${warn}
+      ${tabsHtml}
+      <p class="small" style="margin-bottom:8px">${esc(cur.label)} · report section ${esc(cur.section)}</p>
+      ${rows ? `<div class="table-frame tscroll"><table><thead><tr><th>Code</th><th>Source</th><th>Deck</th><th>Location</th><th>Part</th><th>Material</th><th>Photo</th><th>Drawing</th><th>Quantity</th><th>Status</th><th><span class="sr-only">Missing</span></th><th><span class="sr-only">Edit</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty">No ${cur.key === "other" ? "other" : esc(cur.label)} samples registered yet.${cur.next_code ? ` The next one gets code ${esc(cur.next_code)}.` : ""}</div>`}
       <hr class="divider">
-      <h3 style="margin-top:0">${ed ? "Edit " + esc(ed.code) : "Register a sample"}</h3>
+      <h3 style="margin-top:0">${ed ? "Edit " + esc(ed.code) : cur.key === "other" ? "Register a sample" : "Register a sample in " + esc(cur.label)}</h3>
       <div class="regform" id="regform">
         <label class="field">Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="MM-1"></label>
         <label class="field">Source<input id="rf-source" value="${v("source")}" placeholder="B01"></label>
@@ -589,7 +900,7 @@ function registration() {
         <label class="field wide">Reason if not sampled<input id="rf-restriction" value="${v("restriction")}" placeholder="No access: welded hatch"></label>
       </div>
       <div class="actions" style="margin-top:16px"><button class="primary" id="rf-save">${ed ? "Save changes to " + esc(ed.code) : "Register sample"}</button>${ed ? `<button id="rf-cancel" class="ghost">Cancel</button>` : ""}</div>
-      ${log ? `<div class="log" style="margin-top:20px"><span class="log-title">Latest changes to the registration (${S.register_log.length} in total)</span>${log}</div>` : ""}
+      ${log ? `<div class="log" style="margin-top:20px"><span class="log-title">Latest changes to the registration (${regLog.length} in total)</span>${log}</div>` : ""}
     </div>
   </section>`;
 }
@@ -716,40 +1027,6 @@ function prop(x, flags) {
       <button class="reject" data-act="reject">Reject</button>
     </div>`}</article>`;
 }
-
-function wire() {
-  const op2 = $("#objpick"); if (op2) op2.onchange = () => { editCode = null; post("/api/select-project", { object_id: Number(op2.value) }); };
-  const np = $("#new-project"); if (np) np.onclick = () => $("#newproj").showModal();
-  document.querySelectorAll(".edit-sample").forEach(b => b.onclick = () => { editCode = b.dataset.code; render(); $("#regform").scrollIntoView({ block: "center" }); });
-  const rc = $("#rf-cancel"); if (rc) rc.onclick = () => { editCode = null; render(); };
-  const rs = $("#rf-save"); if (rs) rs.onclick = () => {
-    if (needName()) return;
-    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "photo", "drawing", "quantity", "unit", "status", "restriction"].forEach(k => f[k] = $("#rf-" + k).value);
-    const path = editCode ? "/api/sample-update" : "/api/sample";
-    post(path, { ...f, code: editCode || f.code, by: inspector, report_id: currentReport }).then(() => { editCode = null; render(); }).catch(() => {});
-  };
-  document.querySelectorAll("[data-demo]").forEach(b => b.onclick = () => post("/api/demo", { which: b.dataset.demo }));
-  const pick = $("#pick"); if (pick) pick.onchange = () => load(Number(pick.value));
-  const reread = $("#reread"); if (reread) reread.onclick = () => post("/api/reread", { report_id: currentReport });
-  const reset = $("#reset"); if (reset) reset.onclick = () => { if (confirm("Reset everything to the start? This removes all projects, reports and decisions in this session.")) post("/api/reset", {}); };
-  const op = $("#open-paste"); if (op) op.onclick = () => $("#paste").showModal();
-  const pr = $("#practice"); if (pr) pr.onclick = () => post("/api/practice", {});
-  const up = $("#upload"); if (up) up.onchange = () => uploadPdf(up.files[0]);
-  const ex = $("#export"); if (ex) ex.onclick = () => downloadReport(currentReport);
-  const sg = $("#sign"); if (sg) sg.onclick = () => { if (needName()) return; post("/api/sign", { report_id: currentReport, by: inspector }); };
-  const sh = $("#save-history"); if (sh) sh.onclick = () => { if (needName()) return; post("/api/save-history", { report_id: currentReport, by: inspector }); };
-  document.querySelectorAll(".prop").forEach(box => {
-    const ro = box.querySelector("[data-reopen]");
-    if (ro) ro.onclick = () => { reopened.add(Number(box.dataset.idx)); render(); };
-    box.querySelectorAll("[data-act]").forEach(btn => btn.onclick = () => {
-      if (needName()) return;
-      const act = btn.dataset.act, sample = box.querySelector(".pick-sample").value, note = box.querySelector(".note").value;
-      if (act === "correct" && !sample) return toast("Choose the sample to link to first.");
-      reopened.delete(Number(box.dataset.idx));
-      post("/api/decide", { report_id: currentReport, idx: Number(box.dataset.idx), action: act, by: inspector, sample, note });
-    });
-  });
-}
 async function downloadReport(rid) {
   pending++; document.documentElement.classList.add("is-busy");
   try {
@@ -763,12 +1040,12 @@ async function downloadReport(rid) {
   } finally {
     if (--pending === 0) document.documentElement.classList.remove("is-busy");
   }
-  load(rid);
+  refresh();
 }
 function uploadPdf(file) {
   if (!file) return;
   const rd = new FileReader();
-  rd.onload = () => post("/api/upload-pdf", { label: file.name, pdf_base64: String(rd.result).split(",")[1] }).catch(() => {});
+  rd.onload = () => post("/api/upload-pdf", { label: file.name, pdf_base64: String(rd.result).split(",")[1] }, { to: "lab" }).catch(() => {});
   rd.readAsDataURL(file);
 }
 function needName() {
@@ -782,13 +1059,14 @@ $("#np-ok").onclick = async () => {
   const f = { survey_date: $("#np-date").value };
   ["name", "ref", "kind", "site", "project", "survey_period", "client", "client_address", "owner", "owner_address",
    "surveyor", "technical_responsible", "project_coordinator"].forEach(k => f[k] = $("#np-" + k).value);
-  try { await post("/api/project", f); $("#newproj").close(); editCode = null; } catch (e) {}
+  try { await post("/api/project", f, { to: "dashboard" }); $("#newproj").close(); } catch (e) {}
 };
 $("#paste-cancel").onclick = () => $("#paste").close();
 $("#paste-ok").onclick = async () => {
-  try { await post("/api/report", { label: $("#paste-label").value, text: $("#paste-text").value }); $("#paste").close(); } catch (e) {}
+  try { await post("/api/report", { label: $("#paste-label").value, text: $("#paste-text").value }, { to: "lab" }); $("#paste").close(); } catch (e) {}
 };
-load();
+window.addEventListener("hashchange", onRoute);
+onRoute();
 </script>
 </body>
 </html>

@@ -233,6 +233,129 @@ class FieldRegistration(unittest.TestCase):
             self.s.load_demo("b1")
 
 
+class PerProjectState(unittest.TestCase):
+    """The open project comes with each request (from the browser's URL), not from server memory:
+    two windows on two projects must never change each other's project."""
+
+    def setUp(self):
+        self.s = Service()
+        self.ship = self.s.demo_object
+        self.a = self.s.new_project({"name": "MV Alpha (fictitious)", "site": "Yard A", "project": "J-26-101"})
+        self.b = self.s.new_project({"name": "MV Bravo (fictitious)", "site": "Yard B", "project": "J-26-102"})
+
+    def test_view_follows_the_object_asked_for_not_the_last_one_opened(self):
+        self.assertEqual(self.s.object_id, self.b)                 # the last one created
+        self.assertEqual(self.s.view(None, self.a)["object"]["name"], "MV Alpha (fictitious)")
+        self.assertEqual(self.s.view(None, self.ship)["object"]["id"], self.ship)
+
+    def test_two_projects_used_in_turn_do_not_affect_each_other(self):
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR, self.a)
+        self.s.add_sample({"code": "HM-1", "location": "Railing", "material": "Paint"}, INSPECTOR, self.b)
+        ra = self.s.ingest("Lab A", "---\nMM-1 | Gasket, engine room | Chrysotile 20%", object_id=self.a)
+        rb = self.s.ingest("Lab B", "---\nHM-1 | Railing paint | Lead 50 mg/kg", object_id=self.b)
+        va, vb = self.s.view(None, self.a), self.s.view(None, self.b)
+        self.assertEqual([x["code"] for x in va["register"]], ["MM-1"])
+        self.assertEqual([x["code"] for x in vb["register"]], ["HM-1"])
+        self.assertEqual(([r["id"] for r in va["reports"]], [r["id"] for r in vb["reports"]]), ([ra], [rb]))
+
+    def test_a_report_of_another_project_is_never_shown(self):
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR, self.a)
+        ra = self.s.ingest("Lab A", "---\nMM-1 | Gasket, engine room | Chrysotile 20%", object_id=self.a)
+        self.assertIsNone(self.s.view(ra, self.b)["report"])
+        self.assertEqual(self.s.view(ra, self.a)["report"]["id"], ra)
+
+    def test_unknown_project_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.s.view(None, 9999)
+        with self.assertRaises(ValueError):
+            self.s.add_sample({"code": "MM-1", "location": "X", "material": "Y"}, INSPECTOR, "abc")
+
+    def test_demo_reports_follow_the_object_asked_for(self):
+        with self.assertRaises(ValueError):
+            self.s.load_demo("b1", self.a)
+        rid = self.s.load_demo("b2", self.ship)
+        self.assertEqual(self.s.report_object(rid), self.ship)
+
+    def test_open_lines_count_every_report_of_the_project(self):
+        before = self.s.view(None, self.ship)["open_lines"]
+        rid = self.s.load_demo("b2", self.ship)
+        n = len(self.s.store.rows(rid))
+        self.assertEqual(self.s.view(None, self.ship)["open_lines"], before + n)
+        self.s.decide(rid, 0, "reject", INSPECTOR, None, "")
+        self.assertEqual(self.s.view(None, self.ship)["open_lines"], before + n - 1)
+        self.assertEqual(self.s.view(None, self.a)["open_lines"], 0)
+
+    def test_intake_changes_project_details_with_a_log_and_no_stale_report(self):
+        self.s.add_sample({"code": "MM-1", "location": "Engine room", "material": "Gasket"}, INSPECTOR, self.a)
+        rid = self.s.ingest("Lab A", "---\nMM-1 | Gasket, engine room | Chrysotile 20%", object_id=self.a)
+        self.s.update_project({"client": "Client A (fictitious)", "survey_date": "18 Nov 2026"}, INSPECTOR, self.a)
+        v = self.s.view(rid, self.a)
+        self.assertEqual((v["object"]["info"]["client"], v["object"]["survey_date"]), ("Client A (fictitious)", "18 Nov 2026"))
+        self.assertIn("client: – -> Client A (fictitious)", v["register_log"][-1]["detail"])
+        self.assertFalse(v["report"]["stale"])
+        self.assertEqual(self.s.view(None, self.b)["object"]["info"]["client"], "")
+        with self.assertRaises(ValueError):                     # the required fields stay required
+            self.s.update_project({"name": ""}, INSPECTOR, self.a)
+        with self.assertRaises(ValueError):                     # every change is signed
+            self.s.update_project({"client": "X"}, "", self.a)
+        with self.assertRaises(ValueError):                     # the store accepts only project fields
+            self.s.store.update_object(self.a, {"id": "7"}, INSPECTOR)
+
+
+class TwoWindowsOverHttp(unittest.TestCase):
+    """The same through the real handler: each request names its project; nothing is shared."""
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import HTTPServer
+        from app import server
+        from app.auth import Auth
+        cls.server = server
+        ready = threading.Event()
+
+        def run():
+            server.AUTH = Auth({})
+            server.SERVICE = Service(":memory:")
+            cls.httpd = HTTPServer(("127.0.0.1", 0), server.Handler)
+            cls.port = cls.httpd.server_address[1]
+            ready.set()
+            cls.httpd.serve_forever()
+
+        threading.Thread(target=run, daemon=True).start()
+        ready.wait(10)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def call(self, method, path, body=None):
+        import http.client, json
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request(method, path, json.dumps(body) if body is not None else None, {"Content-Type": "application/json"})
+        res = conn.getresponse()
+        out = (res.status, json.loads(res.read() or b"{}"))
+        conn.close()
+        return out
+
+    def test_an_action_in_one_project_never_moves_the_other_window(self):
+        _, ship = self.call("GET", "/api/state")
+        ship_id = ship["object"]["id"]
+        _, new = self.call("POST", "/api/project", {"name": "MV Window (fictitious)", "site": "Yard", "project": "J-26-200"})
+        new_id = new["object"]["id"]
+        self.assertNotEqual(new_id, ship_id)
+        # window 2 registers a sample in the new project; window 1 still sees the ship, with its report
+        _, after = self.call("POST", "/api/sample", {"object": new_id, "code": "MM-1", "location": "Hold",
+                                                     "material": "Gasket", "by": INSPECTOR})
+        self.assertEqual(after["object"]["id"], new_id)
+        status, w1 = self.call("GET", f"/api/state?object={ship_id}")
+        self.assertEqual((status, w1["object"]["id"]), (200, ship_id))
+        self.assertTrue(w1["reports"])
+        self.assertEqual(self.call("GET", f"/api/state?object={new_id}")[1]["register"][0]["code"], "MM-1")
+        self.assertEqual(self.call("GET", "/api/state?object=9999")[0], 400)
+
+
 class RestartWithDatabaseFile(unittest.TestCase):
     """--db keeps data between runs: a restart must not copy the demo ship, and switching to a
     project whose report was read before the restart must still work."""

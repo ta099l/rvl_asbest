@@ -67,6 +67,46 @@
     return [Math.round(t * 100) / 100, [...units][0]];
   }
 
+  // ---------- substance groups, as group_for_code / next_code in app/ihm.py ----------
+  // This stand-in imitates the server, so it needs the same table. KEEP IN STEP with ihm.PREFIX_GROUP,
+  // ihm.GROUPS and the linker's ALIASES / code_parts. The screen itself keeps no copy.
+  const ALIASES = { CH6: "CR6", PAC: "PAH", M: "MM", ZM: "HM" };
+  const PREFIX_GROUP = { MM: ["asbestos", "asbestos bulk"], KM: ["asbestos", "asbestos dust"], PBS: ["pcb", "PCB bulk"], SS: ["pcb", "PCB swipe"],
+    OS: ["pcb", "PCB oil"], ODS: ["ods", "ODS"], PFOS: ["pfos", "PFOS"], PFAS: ["pfos", "PFAS: under 2.3.4 PFOS until Rolf decides"],
+    HBCDD: ["hbcdd", "HBCDD"], HM: ["metals", "heavy metals"], CR6: ["metals", "chromium-6"], NORM: ["radio", "radioactive (NORM)"],
+    PAH: ["other", "PAH"], TBT: ["other", "organotin"], TPH: ["other", "TPH"], VOC: ["other", "VOC"],
+    VI: ["other", "visual inspection, no lab sample"], V: ["other", "visual registration, no lab sample"],
+    DR: ["other", "document review, no lab sample"], EI: ["other", "equipment identification, no lab sample"] };
+  const GROUPS = [["asbestos", "Asbestos", "MM", true, "2.3.1"], ["pcb", "PCB", "PBS", true, "2.3.2"], ["metals", "Heavy metals", "HM", true, "2.3.6"],
+    ["ods", "ODS", "ODS", false, "2.3.3"], ["pfos", "PFOS / PFAS", "PFOS", false, "2.3.4"], ["hbcdd", "HBCDD", "HBCDD", false, "2.3.5"],
+    ["radio", "Radioactive", "NORM", false, "2.3.7"], ["other", "Other", null, false, "2.3.x"]];
+  function codeParts(c) {
+    const t = String(c || "").toUpperCase().trim(), parts = t.split(/[^A-Z0-9]+/).filter(Boolean);
+    if (parts.length >= 2 && /^\d+$/.test(parts[parts.length - 1])) return [parts.slice(0, -1).join(""), +parts[parts.length - 1]];
+    for (const p of ["CR6", "CH6"]) if (t.startsWith(p) && /^\d+$/.test(t.slice(p.length))) return [p, +t.slice(p.length)];
+    const m = t.match(/^([A-Z]+)(\d+)$/); return m ? [m[1], +m[2]] : null;
+  }
+  function groupForCode(code) {
+    const cp = codeParts(code), std = cp ? (ALIASES[cp[0]] || cp[0]) : "", known = std in PREFIX_GROUP;
+    const g = GROUPS.find(x => x[0] === (known ? PREFIX_GROUP[std][0] : "other"));
+    return { key: g[0], label: g[1], section: g[4], prefix: std, meaning: known ? PREFIX_GROUP[std][1] : "", unknown: !known };
+  }
+  function nextCode(codes, main) {
+    if (!main) return null;
+    const same = codes.map(c => [codeParts(c), c.trim()]).filter(([cp]) => cp && (ALIASES[cp[0]] || cp[0]) === main);
+    if (!same.length) return main + "-1";
+    const [cp, last] = same.reduce((a, b) => b[0][1] > a[0][1] ? b : a), m = last.match(/^(.*?)(\d+)$/);
+    const width = m[2].length > 1 && m[2].startsWith("0") ? m[2].length : 1;
+    return m[1] + String(cp[1] + 1).padStart(width, "0");
+  }
+  function groupsView(o) {
+    const codes = o.register.map(s => s.code);
+    return GROUPS.map(([key, label, main, always, section]) => {
+      const mine = codes.map(groupForCode).filter(g => g.key === key);
+      return { key, label, section, always, count: mine.length, unknown: mine.filter(g => g.unknown).length, next_code: nextCode(codes, main) };
+    });
+  }
+
   // ---------- the view, as Service.report_view in app/server.py ----------
   function reportView(r) {
     const o = st.objects.find(x => x.id === r.object), regBy = Object.fromEntries(o.register.map(s => [s.code, s]));
@@ -175,9 +215,11 @@
     const o = obj(), reports = st.reports.filter(r => r.object === o.id);
     const r = reports.find(x => x.id === rid) || reports[reports.length - 1];
     return {
-      object: { id: o.id, name: o.name, kind: o.kind, ref: o.ref, site: o.site, project: o.project, survey_date: o.survey_date, demo: o.id === st.demoObject },
+      object: { id: o.id, name: o.name, kind: o.kind, ref: o.ref, site: o.site, project: o.project, survey_date: o.survey_date, demo: o.id === st.demoObject, info: clone(o.info) },
+      open_lines: reports.reduce((n, x) => n + x.rows.filter((_, i) => !(i in x.decisions)).length, 0),
       objects: st.objects.map(x => ({ id: x.id, name: x.name, project: x.project })),
-      register: o.register.map(s => ({ ...s, missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
+      groups: groupsView(o),
+      register: o.register.map(s => ({ ...s, group: groupForCode(s.code), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
       register_log: o.log, reports: reports.map(x => ({ id: x.id, label: x.label, report_ref: x.ref, lab: x.lab, ingested_at: x.ingested_at, practice: !!x.seeded })),
       report: r ? reportView(r) : null, asset: assetView(o), thresholds_note: "Thresholds: to confirm by RVL (app/thresholds.json)." };
   }
@@ -259,6 +301,17 @@
       return { sample: d.sample, result: res, approved_by: d.by, approved_at: d.at, via: d.state, changed: !!h.length && h[h.length - 1].result !== res }; }) });
     return r.id;
   }
+  const OBJECT_FIELDS = ["name", "kind", "ref", "site", "project", "survey_date"];
+  function updateProject(b) {                 // the intake page, as Service.update_project
+    const by = (b.by || "").trim(); if (!by) fail("a named inspector is required");
+    const o = obj(), old = { ...Object.fromEntries(OBJECT_FIELDS.map(k => [k, o[k] || ""])), ...o.info };
+    const neu = { ...old }; [...OBJECT_FIELDS, ...INFO].forEach(k => { if (k in b) neu[k] = (b[k] || "").trim(); });
+    if (!neu.name || !neu.project || !neu.site) fail("a project needs a name, a project number and a survey location");
+    const diffs = [...OBJECT_FIELDS, ...INFO].filter(k => old[k] !== neu[k]).map(k => `${k}: ${old[k] || "–"} -> ${neu[k] || "–"}`);
+    if (!diffs.length) return;
+    OBJECT_FIELDS.forEach(k => { o[k] = neu[k]; }); INFO.forEach(k => { o.info[k] = neu[k]; });
+    o.log.push({ at: now(), by, code: "(project)", action: "changed", detail: diffs.join("; ") });
+  }
   function newProject(b) {
     if (!(b.name || "").trim() || !(b.project || "").trim() || !(b.site || "").trim()) fail("a project needs a name, a project number and a survey location");
     addObject({ name: b.name.trim(), kind: b.kind, ref: b.ref, site: b.site.trim(), project: b.project.trim(), survey_date: b.survey_date }, [], b);
@@ -274,6 +327,7 @@
                           r.agent.push({ at: now(), by: "Agent", text: "Read again with the current field registration (in this demo page the proposals stay the same; the app runs the linker again)." }); return r.id; },
     "/api/decide": decide, "/api/sign": sign, "/api/save-history": saveHistory,
     "/api/project": b => { newProject(b); return null; },
+    "/api/project-update": b => { updateProject(b); return b.report_id; },
     "/api/select-project": b => { if (!st.objects.some(o => o.id === +b.object_id)) fail("unknown project"); st.current = +b.object_id; return null; },
     "/api/sample": b => { addSample(b); return b.report_id; }, "/api/sample-update": b => { updateSample(b); return b.report_id; },
   };
@@ -282,11 +336,18 @@
   window.fetch = (url, opt) => {
     const [path, q] = String(url).split("?");
     try {
-      if (path === "/api/state") { const m = (q || "").match(/report=(\d+)/); return reply(200, view(m ? +m[1] : null)); }
+      // The project comes with every request (the screen keeps it in its URL), as in app/server.py.
+      const useObject = id => { if (id === undefined || id === null || id === "") return;
+                                if (!st.objects.some(o => o.id === +id)) fail("unknown project"); st.current = +id; };
+      if (path === "/api/state") { const m = (q || "").match(/report=(\d+)/), mo = (q || "").match(/object=([^&]*)/);
+                                   useObject(mo ? mo[1] : null); return reply(200, view(m ? +m[1] : null)); }
       if (path === "/api/export") return reply(400, { error: APP_ONLY });
       const route = ROUTES[path];
       if (!route) return reply(404, { error: "not found" });
-      const rid = route(opt && opt.body ? JSON.parse(opt.body) : {});
+      const body = opt && opt.body ? JSON.parse(opt.body) : {};
+      if (path !== "/api/project" && path !== "/api/reset") useObject(body.object);
+      if (body.report_id && ["/api/decide", "/api/sign", "/api/save-history", "/api/reread"].includes(path)) st.current = report(body.report_id).object;
+      const rid = route(body);
       return reply(200, view(rid ? +rid : null));
     } catch (e) {
       if (e instanceof ApiError) return reply(400, { error: e.message });

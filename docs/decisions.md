@@ -197,3 +197,72 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **PAH (PAK) recognised** (`app/ihm.py`, `app/thresholds.json`): read from the result instead of 'Unknown substance', reported in 2.3.8. PAH is not in IHM Table A or B, so the app never lists it in Part I or the tables: below the detection limit is reported as such, a measured value is left to the inspector. To confirm by RVL.
 - **Tests:** app 59 (was 55), tests 153; all pass.
 - **Agreed by:** Tasnim (asked for the changes). Ivan: to review.
+
+## 2026-11-17: Redesign of the app's screens (made at Tasnim's request, for Ivan to review)
+
+- **What:** `app/static/index.html` and the login page in `app/auth.py` get one design system: colour, type, spacing and radius tokens (with a dark mode), one font family, a fixed top bar (product, project switcher, inspector), a page header, a compact stepper, panels with a single title, a clear button order (primary, secondary, ghost, danger), labelled form fields, visible keyboard focus, a progress bar while the server works, toasts, and empty and error states (including "James could not be reached").
+- **Wording:** "IMO number", "Ship type · flag" and "Ship" became "Object code", "Type" and "Object" (structures too); the banner "no real AI is running yet" (no longer true with Groq) became "Concept prototype · fictitious data only · the agent proposes, the inspector decides".
+- **Not changed:** every API call, element ID and data attribute the script uses, so no behaviour changed. Fixed on the way: the New-project buttons were wired twice; a function named `history` clashed with the browser's `window.history`.
+- **Checked:** the page was driven end to end against the running app (new project, register sample, upload dev5, approve, change decision, switch project, dialogs, export): 15 of 15 checks pass, no script errors. Not checked by eye in a real browser yet.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-18: Separate pages, and the open project kept per browser tab (made at Tasnim's request, for Ivan to review)
+
+- **Why:** client feedback of 17 Nov: "Clicking a project or a section only makes the page jump to the top" and "Everything is mixed together; I want separate pages or tabs."
+- **What, screen** (`app/static/index.html`):
+  - A hash router in plain JavaScript, no dependency. The address is `#/projects` or `#/p/<project>/<page>`, with `/<report>` added on `lab` and `report`. An unknown address goes to `#/projects`.
+  - Pages in the order of Rolf's work: Dashboard, Upload, Intake, Desk research, Fieldwork, Lab results, Bronbladen, Report.
+    - Upload, Desk research and Bronbladen are placeholders.
+    - The Dashboard has one status card per step, with the object history and audit log folded.
+    - Intake is the New-project fields, editable as a page; the dialog stays for creating a project.
+  - A fixed top bar and tab bar. The Lab results tab has a badge with the undecided lines over all reports of the project.
+  - Changing page scrolls to the top on purpose. An action on a page redraws only that page (and the tabs). It keeps the scroll position (a decided line stays where it was), the focused field, and unsent form text, also across tab switches.
+  - The existing builders (`registration`, `screen`, `reportCard`, `prop`, `historyTable`) moved, not rewritten. `screen` no longer holds the report card, history and audit log.
+- **What, server** (`app/server.py`):
+  - `GET /api/state` takes `?object=&report=`. Every POST reads `object` from its body.
+  - `Service` methods take the project id; `Service.object_id` stays only as a fallback for old callers and the tests.
+  - Sign, export, save-history, decide and reread take the project from the report itself.
+  - `view` never shows a report of another project, and adds `open_lines` and `object.info`.
+  - New `POST /api/project-update`. `/api/select-project` still works but the screen no longer uses it.
+- **What, store** (`james/store.py`, Ivan's to keep; Tasnim agreed):
+  - New `update_object`, which changes the project details and logs old -> new in `register_log` under the code `(project)`.
+  - `register_changed_at` skips that code, so a project-detail change does not mark lab reports out of date.
+- **Demo page:** `app/demo/mock_api.js` follows the same parameters. `app/demo/james-lab-agent.html` was **not** rebuilt; run `python3 app/demo/build_artifact.py` to rebuild it.
+- **Tests:** `app/test_app.py` gets `PerProjectState` (7) and `TwoWindowsOverHttp` (1). The browser checks in `docs/manual-tests.md` were run by script in local headless Chrome on 18 Nov (demo data only): 36 of 36 pass. Look and feel, the real download and login mode are left for a person.
+- **Fixed on the way:** at 768 px the Fieldwork page scrolled sideways, because the hidden "Missing" and "Edit" column labels (`.sr-only`, absolutely positioned) escaped the table's scroll box. The fix is `.tscroll { position: relative }` in `app/static/index.html`. The bug was already in the old single page.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-18: Fieldwork split into substance-group tabs, one mapping for tool and report (made at Tasnim's request, for Ivan to review)
+
+- **Why:** client feedback of 17 Nov: "In fieldwork the substance groups must be separate: asbestos, PCBs, heavy metals."
+- **One mapping** (`app/ihm.py`):
+  - `PREFIX_GROUP` maps each standard prefix to a group, a substance key and its meaning. `GROUPS` gives the tab order, label and main prefix.
+  - `group_for_code()` parses the code with the linker's own `code_parts` and `std_prefix`, so ZM→HM, M→MM, PAC→PAH and CH6→CR6 come from the one alias table.
+  - The section comes from `section_2_3()`, the same function the export uses. A test proves that every demo sample's tab section equals the section it is exported under.
+  - `PREFIX_HINT` and `_code_hint` are unchanged: an HM code still never makes `findings()` guess lead from a result without a substance name.
+- **Groups:**
+
+  | Tab | Section | Codes |
+  |---|---|---|
+  | Asbestos | 2.3.1 | MM, KM, M |
+  | PCB | 2.3.2 | PBS, SS, OS |
+  | Heavy metals | 2.3.6 | HM, ZM, CR6, CH6 |
+  | ODS | 2.3.3 | ODS |
+  | PFOS / PFAS | 2.3.4 | PFOS, PFAS |
+  | HBCDD | 2.3.5 | HBCDD |
+  | Radioactive | 2.3.7 | NORM |
+  | Other | 2.3.x | PAH, PAC, TBT, TPH, VOC; and VI, V, DR, EI (assessments without a lab sample) |
+
+- **Rule for Other:**
+  - A code listed with a known meaning goes to Other without a warning.
+  - A code that is **not** recognised (for example the typo MI02) goes to Other **with** an "unknown code" warning. The warning shows on every Fieldwork tab and on the Dashboard, so a typo cannot silently disappear from its substance group.
+- **PFAS** shares the PFOS tab, labelled "PFOS / PFAS", so nobody reads a PFAS result as PFOS. It is exported under 2.3.4, the only section the template has, and the record keeps the code PFAS-x. This is a one-line change in `PREFIX_GROUP`. Question 17 for Rolf.
+- **View** (`app/server.py`): each register entry gets `group`. The view gets `groups` with section, count, unknown count and `next_code`, in the project's own style (M03 after M02, MM-6 after MM-5; an empty group starts with RVL's `MM-1`).
+- **Screen** (`app/static/index.html`):
+  - Group tabs with counts. Asbestos, PCB and Heavy metals are always shown; the others show when they hold samples or are opened with "Add group" (this browser tab only, nothing saved).
+  - "Add sample" pre-fills the next code. After saving, the tab of the saved sample opens.
+  - One register underneath; the tabs are only views. No migration.
+- **Demo page:** `app/demo/mock_api.js` has a copy of the table, because it stands in for the server, marked "keep in step with ihm.PREFIX_GROUP". The screen keeps no copy.
+- **Tests:** new `app/test_groups.py` (14). Browser checks in local headless Chrome, demo data and fictional codes only: 11 of 11 pass (see `docs/manual-tests.md`).
+- **Open (Rolf):** question 17 (PFAS under 2.3.4?) and 18 (M00 or MM00 for new samples; both are supported).
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.
