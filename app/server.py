@@ -18,6 +18,7 @@ Replay answers are used by default. A Groq API client can be enabled explicitly
 with JAMES_AI_PROVIDER=groq; use fictional data unless RVL has approved more.
 """
 import argparse
+import types
 import base64
 import hashlib
 import binascii
@@ -49,6 +50,8 @@ from ai.james_ai.linker import Sample                   # noqa: E402
 from james.store import EDITABLE, OBJECT_FIELDS, PROJECT_INFO, Store   # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
+# The condition values of a source, in one place (to confirm with Rolf).
+CONDITIONS = json.loads((Path(__file__).resolve().parent / "conditions.json").read_text(encoding="utf-8"))["values"]
 DEMO_REPLAY = ROOT / "ai" / "replays" / "demo_ship.json"
 PRACTICE_ERRORS = 5          # wrong links seeded into a practice report (test case TC12)
 
@@ -91,13 +94,17 @@ class Service:
         with self.lock:
             if getattr(self, "store", None) is not None:
                 self.store.db.close()
-            self.store = Store(self.db_path if self.db_path != ":memory:" else ":memory:")
+            self.store = Store(self.db_path if self.db_path != ":memory:" else ":memory:",
+                               group_of=lambda code: group_for_code(code)["key"])
             # A database file (--db) keeps the demo ship between runs: reuse it instead of adding a copy each start.
             known = next((o["id"] for o in self.store.objects()
                           if (o["name"], o["ref"], o["project"]) == (SHIP["name"], SHIP["ref"], SHIP["project"])), None)
             self.object_id = known or self.store.add_object(SHIP["name"], SHIP["kind"], SHIP["ref"], SHIP["site"],
                                                             SHIP["project"], SHIP["samples"], SHIP.get("survey_date", ""),
                                                             SHIP.get("info"))
+            if known is None:
+                for no, fields in SHIP.get("sources", {}).items():     # the demo ship's bronbladen
+                    self.store.update_source(self.object_id, no, fields, "James (demo data)")
             self.demo_object = self.object_id
             self.runs: Dict[int, HybridRun] = {}
             self.read_at: Dict[int, str] = {}                 # report id -> when the agent last read it
@@ -204,11 +211,35 @@ class Service:
         self.runs[rid] = run
         self.read_at[rid] = now()
         self.store.set_prompt_version(rid, run.ai.prompt_version if run.ai else None)
+        self.save_run(rid)
         n = len(req["rows"])
         self.log(rid, f"Read {n} lab lines. {n - len(run.sent)} settled by the rules, {len(run.sent)} sent to the AI step.")
         for i, p in enumerate(run.response["proposals"]):
             if p["sample"] is None:
                 self.log(rid, f"Line {i + 1} ({req['rows'][i]['raw_id'] or 'no ID'}): no link found.")
+
+    def save_run(self, rid: int) -> None:
+        """Keep the agent's proposals in the database, so a restart does not ask the AI again."""
+        run = self.runs[rid]
+        pv = run.ai.prompt_version if run.ai else None
+        self.store.save_ai(rid, [{"idx": i, "sample": p["sample"], "confidence": p["confidence"], "reason": p["reason"],
+                                  "source": run.source.get(i + 1, "rules"), "sent": (i + 1) in run.sent}
+                                 for i, p in enumerate(run.response["proposals"])], pv)
+
+    def saved_run(self, rid: int) -> Optional[HybridRun]:
+        """Rebuild the agent's run from the saved proposals; None when this report has none saved."""
+        rows = self.store.saved_ai(rid)
+        if rows is None:
+            return None
+        props = [{"n": r["idx"] + 1, "sample": r["ai_code"], "confidence": r["ai_confidence"], "reason": r["ai_reason"]}
+                 for r in rows]
+        sent = [r["idx"] + 1 for r in rows if r["ai_sent"]]
+        ai = None
+        if sent:   # what the screen needs to explain the AI step: which prompt, and whether the answer was used
+            unusable = [r["ai_reason"].split("AI not used: ", 1)[1].rstrip(".") for r in rows
+                        if r["ai_source"] == "rules (ai unusable)" and "AI not used: " in (r["ai_reason"] or "")]
+            ai = types.SimpleNamespace(prompt_version=rows[0]["ai_prompt_version"], problems=unusable[:1])
+        return HybridRun({"proposals": props}, {r["idx"] + 1: r["ai_source"] for r in rows}, sent, ai)
 
     def is_practice(self, rid: int) -> bool:
         """A practice report is remembered in memory; after a restart its label still marks it."""
@@ -221,8 +252,12 @@ class Service:
         """The agent's proposals for a report. They live in memory only, so after a restart of the app
         the report is read again; the inspector's decisions are in the database and stay."""
         if rid not in self.runs:
-            self.read(rid)
-            self.log(rid, "Read again because the app was restarted (proposals are not stored).")
+            saved = self.saved_run(rid)
+            if saved is not None:
+                self.runs[rid] = saved               # the saved proposals: no new AI call after a restart
+            else:
+                self.read(rid)
+                self.log(rid, "Read again: this report was read before proposals were saved.")
         return self.runs[rid]
 
     def reread(self, rid: int) -> None:
@@ -259,11 +294,34 @@ class Service:
         with self.lock:
             fields = {k: (f.get(k) or "").strip() for k in EDITABLE}
             fields["status"] = fields["status"] or "sampled"
-            self.store.add_sample(self.oid(object_id), Sample(id=(f.get("code") or "").strip(), **fields), by)
+            oid = self.oid(object_id)
+            self.check_condition(f, fields["source"])
+            self.store.add_sample(oid, Sample(id=(f.get("code") or "").strip(), **fields), by)
+            self.save_condition(oid, f, fields["source"], by)
 
     def update_sample(self, code: str, f: dict, by: str, object_id=None) -> None:
         with self.lock:
-            self.store.update_sample(self.oid(object_id), code, {k: f[k] for k in EDITABLE if k in f}, by)
+            oid = self.oid(object_id)
+            current = next((s for s in self.store.register(oid) if s.id == code), None)
+            source = (f["source"] if "source" in f else (current.source if current else "")) or ""
+            self.check_condition(f, source.strip())
+            self.store.update_sample(oid, code, {k: f[k] for k in EDITABLE if k in f}, by)
+            self.save_condition(oid, f, source.strip(), by)
+
+    @staticmethod
+    def check_condition(f: dict, source: str) -> None:
+        """A condition belongs to a source (bronblad), not to a sample."""
+        c = (f.get("condition") or "").strip()
+        if not c:
+            return
+        if not source:
+            raise ValueError("a condition belongs to a source: enter the source number first")
+        if c not in CONDITIONS:
+            raise ValueError("condition must be one of: " + ", ".join(CONDITIONS))
+
+    def save_condition(self, oid: int, f: dict, source: str, by: str) -> None:
+        if "condition" in f and source:
+            self.store.update_source(oid, source, {"condition": f.get("condition") or ""}, by)
 
     # ---------- practice review (TC12 / K10) ----------
     def load_practice(self, object_id=None) -> int:
@@ -289,6 +347,7 @@ class Service:
                             "reason": "ID matches register exactly. Description agrees (100%)."}
                 self.runs[rid].source[i + 1] = "rules"
             self.practice[rid] = seeded
+            self.save_run(rid)
             self.agent_log = [e for e in self.agent_log if e["report_id"] != rid]
             self.log(rid, "Practice review loaded. Some proposals are deliberately wrong; the score shows when every line is decided.")
             return rid
@@ -389,6 +448,7 @@ class Service:
             obj["demo"] = oid == self.demo_object
             obj["info"] = self.store.project_info(oid)
             reg = self.store.register(oid)
+            sources = self.store.sources(oid)
             # lab lines without a decision, over every report of this project (badge on the Lab results tab)
             open_lines = self.store.db.execute(
                 "SELECT COUNT(*) FROM lab_row r JOIN lab_report l ON l.id = r.report_id WHERE l.object_id=? "
@@ -399,12 +459,15 @@ class Service:
                                  "material": s.material, "notes": s.notes, "photo": s.photo, "deck": s.deck,
                                  "status": s.status, "restriction": s.restriction, "drawing": s.drawing,
                                  "quantity": s.quantity, "unit": s.unit, "group": group_for_code(s.id),
+                                 "condition": (sources[s.source]["condition"] or "") if s.source in sources else "",
                                  "missing": [n for n, v in (("source", s.source), ("deck", s.deck), ("photo", s.photo),
                                                             ("drawing", s.drawing)) if not v and s.status == "sampled"]}
                                 for s in reg],
                    "register_log": [{"at": e["changed_at"], "by": e["changed_by"], "code": e["code"],
                                      "action": e["action"], "detail": e["detail"]}
-                                    for e in self.store.register_log(oid)],
+                                    for e in self.store.register_log(oid)
+                                    if not e["action"].startswith(("source ", "photo "))],   # those show on the bronbladen
+                   "conditions": CONDITIONS,
                    "reports": reports, "report": None, "open_lines": open_lines,
                    "groups": self.groups_view(reg),
                    "asset": self.store.asset(oid),
@@ -535,6 +598,7 @@ class Service:
                    ("Report Status", "Final" if signed else "Draft"), ("Report Version", str(versions or 0)),
                    ("Report Valid Until", "")]
         sections = {no: {"no": no, "title": title, "samples": [], "records": [], "lab": []} for no, title, _ in SECTIONS_2_3}
+        sources = self.store.sources(oid)
         part1 = {k: [] for k in PART_I}
         lines: Dict[str, dict] = {}
         manual = []
@@ -553,10 +617,16 @@ class Service:
                 sec["samples"].append({"sample": s.id, "deck": s.deck, "location": s.location,
                                        "material": ", ".join(x for x in (s.material, s.notes) if x),
                                        "type": sample_type(s.id), "result": f["text"]})
-                sec["records"].append({"source": s.source or "–", "description": ", ".join(x for x in (s.part, s.material) if x),
+                # The bronblad reads the source table first and falls back to the sample, as before.
+                src = sources.get(s.source) if s.source else None
+                pick = lambda k: (src[k] or "").strip() if src is not None and src[k] else ""
+                src_qty = " ".join(x for x in (pick("quantity"), pick("unit")) if x)
+                sec["records"].append({"source": s.source or "–",
+                                       "description": pick("description") or ", ".join(x for x in (s.part, s.material) if x),
                                        "sample": s.id, "certificate": r["certificate"], "location": where,
-                                       "material": s.material, "result": f["text"], "quantity": qty,
-                                       "conclusion": conclusion, "photo": s.photo, "drawing": s.drawing,
+                                       "material": s.material, "result": f["text"], "quantity": src_qty or qty,
+                                       "condition": pick("condition"),
+                                       "conclusion": pick("conclusion") or conclusion, "photo": s.photo, "drawing": s.drawing,
                                        "listed": listed})
                 sec["lab"].append({"sample": s.id, "certificate": r["certificate"], "method": r["method"],
                                    "result": f["text"], "remarks": r["remarks"], "quantity": r["quantity"] or qty})

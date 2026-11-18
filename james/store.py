@@ -3,7 +3,8 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+import re
+from typing import Callable, Dict, List, Optional
 
 from .linker import Sample, link
 
@@ -18,8 +19,18 @@ _NEW_COLUMNS = {
                ("drawing", "TEXT"), ("quantity", "TEXT"), ("unit", "TEXT")],
     "lab_report": [("source_file", "TEXT"), ("source_sha256", "TEXT"), ("read_method", "TEXT"),
                    ("linker_version", "TEXT"), ("prompt_version", "TEXT")],
-    "lab_row": [("certificate", "TEXT"), ("method", "TEXT"), ("quantity", "TEXT"), ("remarks", "TEXT")],
+    "lab_row": [("certificate", "TEXT"), ("method", "TEXT"), ("quantity", "TEXT"), ("remarks", "TEXT"),
+                ("ai_code", "TEXT"), ("ai_confidence", "TEXT"), ("ai_reason", "TEXT"), ("ai_source", "TEXT"),
+                ("ai_prompt_version", "TEXT"), ("ai_sent", "INTEGER")],
 }
+# Tables added after the first version; on an old file they are created and filled once (see _upgrade).
+_NEW_TABLES = ("source", "photo")
+# What an inspector may change on a source (bronblad). The source number itself never changes.
+SOURCE_FIELDS = ("substance_group", "description", "condition", "quantity", "unit", "assessment", "conclusion", "drawing")
+ASSESSMENTS = ("confirmed", "not hazardous", "PCHM", "not accessible")
+# register_log actions about sources and photos start with these words. They do not change what the
+# linker reads, so they never mark lab proposals out of date (register_changed_at skips them).
+SOURCE_PHOTO_ACTIONS = ("source ", "photo ")
 # Fields an inspector may change after registering a sample. The code itself never changes:
 # lab results and decisions hang on it.
 EDITABLE = ("source", "location", "part", "material", "notes", "photo", "deck", "status", "restriction", "drawing",
@@ -44,12 +55,22 @@ def check_sample(s: Sample) -> None:
         raise ValueError("a place that was not sampled needs the reason (it goes to the survey limitations)")
 
 
+def _schema_table(name: str) -> str:
+    """The CREATE TABLE statement for one table, taken from schema.sql, so old files get exactly the same table."""
+    with open(SCHEMA, encoding="utf-8") as f:
+        sql = re.sub(r"--[^\n]*", "", f.read())
+    stmt = next(x for x in sql.split(";") if re.match(rf"\s*CREATE TABLE {name}\s*\(", x))
+    return stmt.strip().replace(f"CREATE TABLE {name}", f"CREATE TABLE IF NOT EXISTS {name}", 1)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 class Store:
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", group_of: Optional[Callable[[str], Optional[str]]] = None):
+        """group_of: sample code -> substance group (the app passes app.ihm.group_for_code); None leaves it empty."""
+        self.group_of = group_of or (lambda code: None)
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
@@ -76,6 +97,16 @@ class Store:
             self.db.execute("CREATE TABLE IF NOT EXISTS signoff (id INTEGER PRIMARY KEY, "
                             "report_id INTEGER NOT NULL REFERENCES lab_report(id), signed_by TEXT NOT NULL, "
                             "signed_at TEXT NOT NULL, open_items TEXT NOT NULL)")
+            have = {r["name"] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            missing = [t for t in _NEW_TABLES if t not in have]
+            for t in missing:                               # the same CREATE TABLE as schema.sql, no copy
+                self.db.execute(_schema_table(t))
+        if "source" in missing:
+            # Filled ONCE, when the tables are new: running the upgrade again changes nothing, and a photo
+            # an inspector unlinked later is never recreated from the old text field. Nothing is deleted.
+            for o in self.objects():
+                for smp in self.register(o["id"]):
+                    self._sync_sample(o["id"], smp, "James (database upgrade)")
 
     # ---------- objects and samples ----------
     def add_object(self, name: str, kind: str, ref: str, site: str, project: str,
@@ -105,6 +136,8 @@ class Store:
                 "restriction,drawing,quantity,unit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [(oid, s.id, s.source, s.location, s.part, s.material, s.notes, s.photo, s.deck,
                   s.status or "sampled", s.restriction, s.drawing, s.quantity, s.unit) for s in samples])
+        for s in samples:
+            self._sync_sample(oid, s, "James (project created)")
         return oid
 
     def object(self, object_id: int) -> sqlite3.Row:
@@ -163,6 +196,7 @@ class Store:
                  s.status, s.restriction, s.drawing, s.quantity, s.unit))
             self._log_register(object_id, s.id, "added", f"{s.material} at {s.location}"
                                + (f" ({s.status}: {s.restriction})" if s.status == NOT_SAMPLED else ""), by)
+        self._sync_sample(object_id, s, by)
 
     def update_sample(self, object_id: int, code: str, changes: Dict[str, str], by: str) -> None:
         """Change registered fields of a sample. The code never changes; every change is logged old -> new."""
@@ -187,6 +221,71 @@ class Store:
                 "UPDATE sample SET " + ", ".join(f"{k}=?" for k in EDITABLE) + " WHERE object_id=? AND code=?",
                 [getattr(new, k) for k in EDITABLE] + [object_id, code])
             self._log_register(object_id, code, "changed", "; ".join(diffs), by)
+            if old.photo and old.photo != new.photo:         # unlink, never delete: the row and its file stay
+                cur = self.db.execute("UPDATE photo SET sample_code=NULL WHERE object_id=? AND photo_no=? AND sample_code=?",
+                                      (object_id, old.photo, code))
+                if cur.rowcount:
+                    self._log_register(object_id, old.photo, "photo unlinked", f"from sample {code}", by)
+            if old.source != new.source:
+                cur = self.db.execute("UPDATE photo SET source_no=? WHERE object_id=? AND sample_code=?",
+                                      (new.source or None, object_id, code))
+                if cur.rowcount:
+                    self._log_register(object_id, code, "photo changed",
+                                       f"photos of sample {code}: source {old.source or '–'} -> {new.source or '–'}", by)
+        self._sync_sample(object_id, new, by)
+
+    # ---------- sources (bronbladen) and photos ----------
+    def _sync_sample(self, object_id: int, s: Sample, by: str) -> None:
+        """Make sure the source and photo a sample names exist as rows. Adds, never overwrites:
+        a new source copies quantity and unit from the first sample that names it."""
+        with self.db:
+            if (s.source or "").strip():
+                cur = self.db.execute(
+                    "INSERT OR IGNORE INTO source(object_id,source_no,substance_group,quantity,unit,updated_by,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?)", (object_id, s.source.strip(), self.group_of(s.id), s.quantity or None,
+                                               s.unit or None, by.strip(), _now()))
+                if cur.rowcount:
+                    self._log_register(object_id, s.source.strip(), "source added", f"from sample {s.id}", by)
+            if (s.photo or "").strip():
+                no = s.photo.strip()
+                row = self.db.execute("SELECT sample_code FROM photo WHERE object_id=? AND photo_no=?", (object_id, no)).fetchone()
+                if row is None:
+                    n = self.db.execute("SELECT COUNT(*) FROM photo WHERE object_id=?", (object_id,)).fetchone()[0]
+                    self.db.execute("INSERT INTO photo(object_id,photo_no,source_no,sample_code,sort_order) VALUES (?,?,?,?,?)",
+                                    (object_id, no, (s.source or "").strip() or None, s.id, n + 1))
+                    self._log_register(object_id, no, "photo added", f"for sample {s.id}, no file yet", by)
+                elif row["sample_code"] is None:
+                    self.db.execute("UPDATE photo SET sample_code=?, source_no=? WHERE object_id=? AND photo_no=?",
+                                    (s.id, (s.source or "").strip() or None, object_id, no))
+                    self._log_register(object_id, no, "photo linked", f"to sample {s.id}", by)
+
+    def sources(self, object_id: int) -> Dict[str, sqlite3.Row]:
+        return {r["source_no"]: r for r in
+                self.db.execute("SELECT * FROM source WHERE object_id=? ORDER BY source_no", (object_id,))}
+
+    def photos(self, object_id: int) -> List[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM photo WHERE object_id=? ORDER BY sort_order, id", (object_id,)).fetchall()
+
+    def update_source(self, object_id: int, source_no: str, changes: Dict[str, str], by: str) -> None:
+        """Change the details of a source (bronblad). Logged old -> new; the source number never changes."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        bad = set(changes) - set(SOURCE_FIELDS)
+        if bad:
+            raise ValueError("these fields cannot be changed: " + ", ".join(sorted(bad)))
+        row = self.db.execute("SELECT * FROM source WHERE object_id=? AND source_no=?", (object_id, source_no)).fetchone()
+        if row is None:
+            raise ValueError(f"unknown source {source_no!r}")
+        new = {k: (v or "").strip() or None for k, v in changes.items()}
+        if new.get("assessment") and new["assessment"] not in ASSESSMENTS:
+            raise ValueError("assessment must be one of: " + ", ".join(ASSESSMENTS))
+        diffs = [f"{k}: {row[k] or '–'} -> {v or '–'}" for k, v in new.items() if (row[k] or None) != v]
+        if not diffs:
+            return
+        with self.db:
+            self.db.execute("UPDATE source SET " + ", ".join(f"{k}=?" for k in new) + ", updated_by=?, updated_at=? "
+                            "WHERE object_id=? AND source_no=?", [*new.values(), by.strip(), _now(), object_id, source_no])
+            self._log_register(object_id, source_no, "source changed", "; ".join(diffs), by)
 
     def _has_links(self, object_id: int, code: str) -> bool:
         q = """SELECT 1 FROM decision d JOIN lab_row r ON r.id = d.lab_row_id JOIN lab_report l ON l.id = r.report_id
@@ -201,7 +300,8 @@ class Store:
         return self.db.execute("SELECT * FROM register_log WHERE object_id=? ORDER BY id", (object_id,)).fetchall()
 
     def register_changed_at(self, object_id: int) -> Optional[str]:
-        r = self.db.execute("SELECT MAX(changed_at) m FROM register_log WHERE object_id=? AND code<>?",
+        r = self.db.execute("SELECT MAX(changed_at) m FROM register_log WHERE object_id=? AND code<>? "
+                            "AND action NOT LIKE 'source %' AND action NOT LIKE 'photo %'",
                             (object_id, PROJECT_LOG_CODE)).fetchone()
         return r["m"]
 
@@ -255,6 +355,21 @@ class Store:
                 self.db.execute("UPDATE lab_row SET proposed_code=?, confidence=?, reason=?, flags=? "
                                 "WHERE report_id=? AND idx=?",
                                 (p.sample_id, p.confidence, p.reason, ",".join(p.flags), report_id, p.index))
+
+    def save_ai(self, report_id: int, lines: List[dict], prompt_version: Optional[str]) -> None:
+        """Save the agent's proposal per lab line (rules first, AI second), so a restart shows it again
+        without a new AI call. lines: {idx, sample, confidence, reason, source, sent}."""
+        with self.db:
+            self.db.executemany(
+                "UPDATE lab_row SET ai_code=?, ai_confidence=?, ai_reason=?, ai_source=?, ai_prompt_version=?, ai_sent=? "
+                "WHERE report_id=? AND idx=?",
+                [(x["sample"], x["confidence"], x["reason"], x["source"], prompt_version, int(bool(x["sent"])),
+                  report_id, x["idx"]) for x in lines])
+
+    def saved_ai(self, report_id: int) -> Optional[List[sqlite3.Row]]:
+        """The saved proposals, or None when this report was read before they were saved (read it again)."""
+        rows = self.rows(report_id)
+        return rows if rows and all(r["ai_source"] is not None for r in rows) else None
 
     def set_prompt_version(self, report_id: int, version: Optional[str]) -> None:
         """Record which prompt the AI step used for this report (None when the AI was not asked)."""

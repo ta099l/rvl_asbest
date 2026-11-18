@@ -8,6 +8,7 @@
   const NOT_SAMPLED = "not sampled";
   const APP_ONLY = "This needs the James app on a laptop (start_james.bat): the linker and the Word export run in Python. This demo page shows the flow with the demo ship.";
   const EDITABLE = ["source", "location", "part", "material", "notes", "photo", "deck", "status", "restriction", "drawing", "quantity", "unit"];
+  const CONDITIONS = ["Good", "Damaged", "Weathered", "Unknown"];     // keep in step with app/conditions.json
   const INFO = ["client", "client_address", "owner", "owner_address", "surveyor", "technical_responsible", "project_coordinator", "survey_period"];
   window.confirm = () => true;              // the demo viewer has no dialogs; resetting a demo is harmless
 
@@ -219,7 +220,8 @@
       open_lines: reports.reduce((n, x) => n + x.rows.filter((_, i) => !(i in x.decisions)).length, 0),
       objects: st.objects.map(x => ({ id: x.id, name: x.name, project: x.project })),
       groups: groupsView(o),
-      register: o.register.map(s => ({ ...s, group: groupForCode(s.code), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
+      conditions: CONDITIONS,
+      register: o.register.map(s => ({ ...s, group: groupForCode(s.code), condition: ((o.sources || {})[s.source] || ""), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
       register_log: o.log, reports: reports.map(x => ({ id: x.id, label: x.label, report_ref: x.ref, lab: x.lab, ingested_at: x.ingested_at, practice: !!x.seeded })),
       report: r ? reportView(r) : null, asset: assetView(o), thresholds_note: "Thresholds: to confirm by RVL (app/thresholds.json)." };
   }
@@ -256,6 +258,12 @@
     if (sc && sc.done) r.agent.push({ at: now(), by: "Agent", text: `Practice result: ${sc.found} of ${sc.seeded} deliberate errors found.` });
     return r.id;
   }
+  function saveCondition(o, b, source) {         // as Service.check_condition / save_condition: per source
+    const c = (b.condition || "").trim();
+    if (c && !source) fail("a condition belongs to a source: enter the source number first");
+    if (c && !CONDITIONS.includes(c)) fail("condition must be one of: " + CONDITIONS.join(", "));
+    if ("condition" in b && source) (o.sources = o.sources || {})[source] = c;
+  }
   function checkSample(s) {
     const miss = [["code", s.code], ["location", s.location], ["material", s.material]].filter(([, v]) => !(v || "").trim()).map(([k]) => k);
     if (miss.length) fail("a sample needs " + miss.join(", "));
@@ -266,7 +274,8 @@
     const o = obj(), s = { code: (b.code || "").trim(), ...Object.fromEntries(EDITABLE.map(k => [k, (b[k] || "").trim()])) };
     s.status = s.status || "sampled"; checkSample(s);
     if (o.register.some(x => x.code === s.code)) fail(`sample code ${s.code} is already registered for this object; codes must be unique`);
-    o.register.push(s); o.regRev++;
+    if ((b.condition || "").trim() && !s.source) fail("a condition belongs to a source: enter the source number first");
+    o.register.push(s); o.regRev++; saveCondition(o, b, s.source);
     o.log.push({ at: now(), by, code: s.code, action: "added", detail: `${s.material} at ${s.location}` + (s.status === NOT_SAMPLED ? ` (${s.status}: ${s.restriction})` : "") });
   }
   function updateSample(b) {
@@ -276,6 +285,7 @@
     const linked = st.reports.some(r => r.object === o.id && Object.values(r.decisions).some(d => d.state !== "rejected" && d.sample === old.code));
     if (neu.status === NOT_SAMPLED && old.status !== NOT_SAMPLED && linked) fail(`${old.code} already has a linked lab result, so it cannot become 'not sampled'`);
     const diffs = EDITABLE.filter(k => (old[k] || "") !== (neu[k] || "")).map(k => `${k}: ${old[k] || "–"} -> ${neu[k] || "–"}`);
+    saveCondition(o, b, neu.source);
     if (!diffs.length) return;
     Object.assign(old, neu); o.regRev++;
     o.log.push({ at: now(), by, code: old.code, action: "changed", detail: diffs.join("; ") });

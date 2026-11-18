@@ -96,6 +96,18 @@ class ExportTests(unittest.TestCase):
         self.assertIn("This concerns Asbestos", x)
         self.assertIn(">C-4471-02<", x)
 
+    def test_source_table_only_adds_the_condition_line(self):
+        """The bronblad reads the source table first. For the demo ship that gives the same report as the
+        old sample-based values, except one new Condition row per Source Record."""
+        new = self.content(export(self.s.view(self.rid)["report"], self.tpl))
+        self.s.store.db.execute("DELETE FROM source")          # back to the old, sample-based values
+        old = self.content(export(self.s.view(self.rid)["report"], self.tpl))
+        cond = re.compile(r"<table:table-row><table:table-cell><text:p>Condition</text:p></table:table-cell>.*?</table:table-row>")
+        # one per Source Record: 8 approved lines + the "No approved samples" record of 2.3.4, 2.3.5 and 2.3.7
+        self.assertEqual(len(cond.findall(new)), 11)
+        self.assertIn("<text:p>Damaged</text:p>", new)           # B01, the exhaust pipe insulation
+        self.assertEqual(cond.sub("", new), cond.sub("", old))   # everything else is the same
+
     def test_fixed_lines_get_quantities_from_the_registration(self):
         x = self.content(export(self.s.view(self.rid)["report"], self.tpl))
         a1 = re.search(r"A-1 Asbestos.*?</table:table-row>", x).group(0)

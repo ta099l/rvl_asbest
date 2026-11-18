@@ -266,3 +266,33 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **Tests:** new `app/test_groups.py` (14). Browser checks in local headless Chrome, demo data and fictional codes only: 11 of 11 pass (see `docs/manual-tests.md`).
 - **Open (Rolf):** question 17 (PFAS under 2.3.4?) and 18 (M00 or MM00 for new samples; both are supported).
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-18: Bronbladen get their own data (sources, photos, condition) and AI proposals are saved (made at Tasnim's request, for Ivan to review)
+
+- **Why:** a bronblad ties together source, samples, certificate, location, material, condition, results, quantity, conclusion and photos. Rolf: if photo, sample and certificate are not linked correctly, the report is unusable. The AI proposals also lived only in memory, so a restart called Groq again.
+- **Database** (`schema.sql` for new files, `Store._upgrade` for old ones; additive only, nothing deleted):
+  - New table `source`: one row per source number. The link stays `sample.source = source.source_no`. Fields: substance group, description, condition, quantity, unit, assessment (confirmed / not hazardous / PCHM / not accessible), conclusion, drawing, updated_by and updated_at.
+  - New table `photo`: one row per photo number, with file fields that stay empty until P4 (`stored_name` NULL means "photo missing"). Unique per project by `photo_no` and by `sha256`.
+  - `lab_row` gets `ai_code`, `ai_confidence`, `ai_reason`, `ai_source`, `ai_prompt_version` and `ai_sent`. `ai_sent` was added on top of the request, so "sent to the AI" and the AI note stay right after a restart.
+- **Upgrade of an old file:**
+  - Old files get the same `CREATE TABLE` text, read from `schema.sql`, not a copy.
+  - The source and photo rows are filled **once**, when the tables are first created: one source per distinct `sample.source`, with quantity and unit from its first sample; one file-less photo row per non-empty `sample.photo`.
+  - Opening the file again changes nothing, and a photo unlinked later is never recreated.
+  - Deck stays on the sample (agreed).
+  - Checked: a file made by the previous version opens, upgrades, keeps its decisions, and every page of both projects renders (22 browser checks).
+- **Logging (rule 5):** every source and photo add, change, link and unlink goes into `register_log` with who and when, with an action starting `source ` or `photo `. They are kept out of the Fieldwork log on screen (they belong on the bronbladen page) and stay in the database.
+- **Out of date:** `register_changed_at` skips source and photo actions, so a condition or photo row change does not mark lab proposals out of date. **Confirmed by test:** changing a sample's own source number or location still marks them out of date, exactly as before.
+- **AI proposals:** `Service.read` saves the hybrid result per line. After a restart, `run_for` rebuilds the run from the database without calling the AI (test with a client that fails when called). Reports read before this change are read once more, then saved. `/api/reread` still forces a fresh run. The practice review saves its seeded proposals.
+- **Condition:**
+  - The values live in `app/conditions.json`: Good, Damaged, Weathered, Unknown, marked "to confirm with Rolf".
+  - Condition is stored on the source, not the sample.
+  - In the register form it is disabled until a source number is filled in, with the hint "Enter a source number first". The server refuses it too ("a condition belongs to a source: enter the source number first").
+- **Export and view:** the Source Record reads description, condition, quantity and conclusion from the source table first, and falls back to the sample-based values as before. The export copies the template's "Source Description" row once as a "Condition" row.
+  - Test: the demo export with sources equals the old fallback export apart from the Condition rows.
+  - Not checked against RVL's real template: if its label cell is formatted differently, the copied row may keep the label "Source Description".
+- **Demo:** MV Noorderlicht has 10 sources (B01–B10) over asbestos, PCB, ODS and heavy metals, with conditions. B10 (MM-5, no access behind a welded panel) is assessment PCHM. The descriptions are the old fallback text, so the demo report only gains the Condition line.
+- **Not done (agreed):** deleting a sample. It is not needed now.
+- **For P4 (photo upload):** P4 retires the `sample.photo` text field as the place where photos are recorded. An uploaded file is matched to an existing file-less photo row by `photo_no` (and refused as a duplicate by `sha256`), so the upgrade's rows are filled in rather than duplicated.
+- **Demo page:** `app/demo/mock_api.js` accepts a condition per source. Its built-in demo has no conditions until `app/demo/build_artifact.py` is run again.
+- **Tests:** new `tests/test_sources.py` (11); `app/test_app.py` +5 (saved proposals, condition); `app/test_export.py` +1 (Condition only).
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

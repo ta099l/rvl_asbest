@@ -53,3 +53,19 @@ Type a name in the **Inspector** field at the top before you approve, register o
 **Still for a person:**
 - [ ] How the group tabs look and read.
 - [ ] Export a report and check one sample per group appears under the same 2.3.x section as its tab. A unit test covers this for the demo data; the real template was not used.
+
+## Sources, photos, condition, saved AI proposals (18 Nov 2026)
+
+**Checked by script (18 Nov 2026):** a database file made by the previous version (demo ship, a new project, 4 decisions) was opened by the new version in local headless Chrome. 22 of 22 checks passed.
+
+- [x] Both projects are listed, and all 8 pages of both projects open.
+- [x] The 4 old decisions are still there.
+- [x] The report card's Source Records have a Condition row ("–" until a condition is set).
+- [x] In the register form, Condition is disabled with "Enter a source number first" until a source number is typed.
+- [x] The condition of an upgraded source can be saved and is shown again when you edit the sample.
+- [x] No script errors.
+
+**Still for a person:**
+- [ ] Open your own `james.db` with the new version (make a copy first) and click through every page.
+- [ ] Restart the app with `JAMES_AI_PROVIDER=groq`: a report read before the restart shows its proposals without a new "Groq usage" line in the console.
+- [ ] Export a report and check the Condition line under each Source Record in Word or LibreOffice.

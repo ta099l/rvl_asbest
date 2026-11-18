@@ -191,15 +191,28 @@ def _records(xml_block: str, sec: dict) -> str:
     recs = sec["records"] or [{"source": DASH, "description": "No approved samples in this section", "sample": DASH,
                                "certificate": DASH, "location": DASH, "material": DASH, "result": DASH,
                                "quantity": DASH, "conclusion": DASH}]
+    xml_block = _add_condition_row(xml_block)
     out = []
     for r in recs:
         b = _fill(xml_block, {"source_number": f" {r['source']} ", "source_description": r["description"],
+                              "source_condition": r.get("condition") or DASH,
                               "sample_number": r["sample"], "laboratory_certificate": r["certificate"] or "missing",
                               "location": r["location"], "material": r["material"], "analysis_results": r["result"],
                               "quantity": r["quantity"] or "inspector"})
         b = b.replace(">This concerns<", ">" + escape(r["conclusion"]) + "<", 1)
         out.append(b)
     return "".join(out)
+
+
+def _add_condition_row(xml_block: str) -> str:
+    """The template's Source Record has no Condition line: copy its 'Source Description' row once,
+    right below it, with the label 'Condition' and its own placeholder."""
+    m = next((m for m in ROW.finditer(xml_block) if "&lt;source_description&gt;" in m.group(0)), None)
+    if m is None or "&lt;source_condition&gt;" in xml_block:
+        return xml_block
+    row = m.group(0).replace("&lt;source_description&gt;", "&lt;source_condition&gt;")
+    row = row.replace(">Source Description<", ">Condition<", 1)
+    return xml_block[:m.end()] + row + xml_block[m.end():]
 
 
 def _expand_records(xml: str, sections: List[dict]) -> str:

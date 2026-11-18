@@ -65,6 +65,12 @@ CREATE TABLE lab_row (
     confidence  TEXT,                   -- high / medium / low
     reason      TEXT NOT NULL,
     flags       TEXT NOT NULL,          -- comma separated, e.g. row:5:conflict
+    ai_code     TEXT,                   -- the agent's final proposal (rules first, AI second), saved so a
+    ai_confidence TEXT,                 --   restart shows it again without calling the AI
+    ai_reason   TEXT,
+    ai_source   TEXT,                   -- rules, ai, both, disagree, guard, rules (ai unusable); NULL = not saved
+    ai_prompt_version TEXT,
+    ai_sent     INTEGER,                -- 1 if this line went to the AI step
     UNIQUE (report_id, idx)
 );
 
@@ -116,4 +122,44 @@ CREATE TABLE register_log (             -- append-only: every change to the fiel
     detail      TEXT NOT NULL,          -- what changed, old -> new
     changed_by  TEXT NOT NULL,
     changed_at  TEXT NOT NULL
+);
+
+-- One source (bron) per source number: what a bronblad (Source Record) is about. The link stays
+-- sample.source = source.source_no; several samples can share one source.
+CREATE TABLE source (
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    source_no   TEXT NOT NULL,          -- e.g. B01, as in sample.source
+    substance_group TEXT,               -- asbestos, pcb, metals, ... (app/ihm.py group_for_code)
+    description TEXT,
+    condition   TEXT,                   -- Good, Damaged, Weathered, Unknown (app/conditions.json, to confirm)
+    quantity    TEXT,
+    unit        TEXT,
+    assessment  TEXT,                   -- confirmed, not hazardous, PCHM, not accessible
+    conclusion  TEXT,
+    drawing     TEXT,
+    updated_by  TEXT,
+    updated_at  TEXT,
+    PRIMARY KEY (object_id, source_no)
+);
+
+-- A photo of a source or sample. stored_name NULL = the photo number is known but no file yet
+-- ("photo missing"); files are added later (P4), matched to this row by photo_no.
+CREATE TABLE photo (
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    photo_no    TEXT NOT NULL,          -- e.g. F-012, as in sample.photo
+    stored_name TEXT,
+    original_name TEXT,
+    sha256      TEXT,
+    mime        TEXT,
+    width       INTEGER,
+    height      INTEGER,
+    description TEXT,
+    source_no   TEXT,
+    sample_code TEXT,                   -- NULL = not linked to a sample (unlinked rows are kept)
+    sort_order  INTEGER,
+    uploaded_by TEXT,
+    uploaded_at TEXT,
+    UNIQUE (object_id, photo_no),
+    UNIQUE (object_id, sha256)
 );

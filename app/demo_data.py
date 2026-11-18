@@ -29,6 +29,23 @@ SHIP = {
         Sample("MM-5", "B10", "Void space behind engine room panel", "Pipe", "Pipe insulation", "", "", deck="Deck 1", drawing="GA-01 pos 5", quantity="3", unit="m",
                status=NOT_SAMPLED, restriction="No access: void space behind a welded panel"),
     ],
+    # The bronbladen (sources) of the demo ship. Descriptions are the same text the export used before
+    # (part, material), so the demo report only gains the Condition line. Quantity and unit are copied
+    # from the first sample of each source when the source is created.
+    "sources": {
+        "B01": {"description": "Exhaust pipe, Insulation", "condition": "Damaged"},
+        "B02": {"description": "Floor, Floor tile", "condition": "Good"},
+        "B03": {"description": "Flange, Gasket", "condition": "Good"},
+        "B04": {"description": "Bulkhead, Fire-resistant board", "condition": "Good"},
+        "B05": {"description": "Cable bundle, Cable sheathing", "condition": "Weathered"},
+        "B06": {"description": "Transformer, Cooling oil", "condition": "Good"},
+        "B07": {"description": "Cold room, Insulation foam", "condition": "Damaged"},
+        "B08": {"description": "Railing, Paint layer (3 coats)", "condition": "Weathered"},
+        "B09": {"description": "Window, Window rubber", "condition": "Good"},
+        "B10": {"description": "Pipe, Pipe insulation", "condition": "Unknown", "assessment": "PCHM",
+                "conclusion": "No access: void space behind a welded panel. Treat as potentially containing "
+                              "hazardous materials (PCHM) until sampled."},
+    },
     "reports": {
         "b1": {
             "label": "Lab report L-26-4471",

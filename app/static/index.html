@@ -540,8 +540,8 @@ function drawPage() {
   const callout = r && r.practice && WITH_REPORT.includes(route.page)
     ? `<div class="callout practice"><b>Practice review.</b> Some proposals in this report are deliberately wrong. Review as you normally would; your score shows when every line is decided. Nothing here reaches the history or a signed report.</div>` : "";
   $("#page").innerHTML = callout + p.view();
+  restoreDrafts();          // first the unsent text, then the wiring that reads it (e.g. Condition needs a source)
   p.wire();
-  restoreDrafts();
 }
 // After an action on the same page: redraw only the page (and the tab badge), keep the scroll
 // position, the focused field and unsent form text.
@@ -706,9 +706,14 @@ function wireFieldwork() {
     editCode = b.dataset.code; update({ clear: ["rf-"] }); $("#regform").scrollIntoView({ block: "center" });
   });
   const rc = $("#rf-cancel"); if (rc) rc.onclick = () => { editCode = null; update({ clear: ["rf-"] }); };
+  // Condition belongs to the source: only open once a source number is filled in (the server checks too).
+  const srcIn = $("#rf-source"), cond = $("#rf-condition"), hint = $("#rf-condition-hint");
+  const syncCondition = () => { const none = !srcIn.value.trim(); cond.disabled = none; hint.hidden = !none; };
+  if (srcIn && cond) { srcIn.addEventListener("input", syncCondition); syncCondition(); }
   const rs = $("#rf-save"); if (rs) rs.onclick = () => {
     if (needName()) return;
-    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "photo", "drawing", "quantity", "unit", "status", "restriction"].forEach(k => f[k] = $("#rf-" + k).value);
+    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "photo", "drawing", "quantity", "unit", "status", "restriction", "condition"].forEach(k => f[k] = $("#rf-" + k).value);
+    if (!f.source.trim()) f.condition = "";        // a condition belongs to a source
     const path = editCode ? "/api/sample-update" : "/api/sample";
     const code = (editCode || f.code).trim();
     post(path, { ...f, code, by: inspector }, { clear: ["rf-"], onOk: data => {
@@ -887,6 +892,9 @@ function registration() {
       <div class="regform" id="regform">
         <label class="field">Code<input id="rf-code" value="${v("code")}" ${ed ? "disabled" : ""} placeholder="MM-1"></label>
         <label class="field">Source<input id="rf-source" value="${v("source")}" placeholder="B01"></label>
+        <label class="field">Condition of the source<select id="rf-condition" aria-describedby="rf-condition-hint">
+          <option value=""></option>${S.conditions.map(c => `<option ${ed && ed.condition === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+          <span class="small" id="rf-condition-hint">Enter a source number first</span></label>
         <label class="field">Deck<input id="rf-deck" value="${v("deck")}" placeholder="Deck 2"></label>
         <label class="field wide">Location<input id="rf-location" value="${v("location")}" placeholder="Engine room, exhaust pipe"></label>
         <label class="field">Part<input id="rf-part" value="${v("part")}" placeholder="Exhaust pipe"></label>
@@ -939,7 +947,7 @@ function reportCard(r) {
     ? tbl(["Sample No.", "Deck Level", "Location", "Material / Use", "Sample Type", "Analysis Results"],
           s.samples.map(x => [esc(x.sample), esc(x.deck), esc(x.location), esc(x.material), esc(x.type), esc(x.result)])) +
       s.records.map(x => `<div class="record"><b>Source ${esc(x.source)} – ${esc(s.title.split(" (")[0])} Source Record</b>` +
-        tbl(["Description", "Details"], [["Source Description", esc(x.description)], ["Sample Number", esc(x.sample)],
+        tbl(["Description", "Details"], [["Source Description", esc(x.description)], ["Condition", x.condition ? esc(x.condition) : "–"], ["Sample Number", esc(x.sample)],
             ["Laboratory Certificate", missing(x.certificate)], ["Location", esc(x.location)], ["Material", esc(x.material)],
             ["Analysis Results", esc(x.result)], ["Quantity", insp(x.quantity)], ["Photo / drawing", `${missing(x.photo)} · ${missing(x.drawing)}`],
             ["Conclusions and/or Recommendations", esc(x.conclusion)]]) + `</div>`).join("") +

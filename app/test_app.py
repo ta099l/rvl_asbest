@@ -356,6 +356,85 @@ class TwoWindowsOverHttp(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/state?object=9999")[0], 400)
 
 
+class CountingClient:
+    """Passes prompts on to the real client and counts them; fail=True makes any call an error."""
+
+    def __init__(self, inner=None, fail=False):
+        self.inner, self.fail, self.calls = inner, fail, 0
+
+    def complete(self, text):
+        self.calls += 1
+        if self.fail:
+            raise AssertionError("the AI was called")
+        return self.inner.complete(text)
+
+
+class SavedProposals(unittest.TestCase):
+    """After a restart the agent's proposals come from the database: no new AI call (replay provider)."""
+
+    def setUp(self):
+        import os, tempfile
+        self.path = os.path.join(tempfile.mkdtemp(), "james.db")
+        s = Service(self.path)
+        self.oid = s.demo_object
+        self.rid = s.view(None, self.oid)["report"]["id"]
+        self.before = [x["proposal"] for x in s.view(self.rid, self.oid)["report"]["rows"]]
+        self.ai_note = s.view(self.rid, self.oid)["report"]["ai_note"]
+        self.assertTrue(any(p["sent_to_ai"] for p in self.before))      # the demo really used the AI step
+        s.store.db.close()
+
+    def test_restart_shows_the_same_proposals_without_calling_the_ai(self):
+        s2 = Service(self.path)
+        s2.client = CountingClient(fail=True)
+        r = s2.view(self.rid, self.oid)["report"]
+        self.assertEqual([x["proposal"] for x in r["rows"]], self.before)
+        self.assertEqual(r["ai_note"], self.ai_note)
+        self.assertEqual(s2.client.calls, 0)
+        s2.decide(self.rid, 0, "approve", INSPECTOR, None, "")        # deciding works on the saved run
+        s2.store.db.close()
+
+    def test_read_again_still_asks_the_ai(self):
+        s2 = Service(self.path)
+        s2.client = CountingClient(inner=s2.client)
+        s2.reread(self.rid)
+        self.assertEqual(s2.client.calls, 1)
+        s2.store.db.close()
+
+
+class ConditionOfASource(unittest.TestCase):
+    def setUp(self):
+        self.s = Service()
+        self.oid = self.s.new_project({"name": "MV Condition (fictitious)", "site": "Yard", "project": "J-26-500"})
+
+    def condition_of(self, code):
+        return next(x["condition"] for x in self.s.view(None, self.oid)["register"] if x["code"] == code)
+
+    def test_condition_is_saved_on_the_source(self):
+        self.s.add_sample({"code": "MM-1", "source": "B01", "location": "Hold", "material": "Gasket", "condition": "Damaged"},
+                          INSPECTOR, self.oid)
+        self.assertEqual(self.s.store.sources(self.oid)["B01"]["condition"], "Damaged")
+        self.s.add_sample({"code": "MM-2", "source": "B01", "location": "Hold", "material": "Gasket"}, INSPECTOR, self.oid)
+        self.assertEqual(self.condition_of("MM-2"), "Damaged")            # same source, same condition
+        self.s.update_sample("MM-2", {"condition": "Weathered"}, INSPECTOR, self.oid)
+        self.assertEqual(self.condition_of("MM-1"), "Weathered")
+        self.assertEqual(self.s.view(None, self.oid)["conditions"], ["Good", "Damaged", "Weathered", "Unknown"])
+
+    def test_condition_needs_a_source_number_and_a_known_value(self):
+        with self.assertRaisesRegex(ValueError, "enter the source number first"):
+            self.s.add_sample({"code": "MM-1", "location": "Hold", "material": "Gasket", "condition": "Good"}, INSPECTOR, self.oid)
+        self.assertEqual(self.s.view(None, self.oid)["register"], [])    # refused before anything was saved
+        with self.assertRaises(ValueError):
+            self.s.add_sample({"code": "MM-1", "source": "B01", "location": "Hold", "material": "Gasket", "condition": "Rusty"},
+                              INSPECTOR, self.oid)
+
+    def test_source_and_photo_lines_stay_out_of_the_fieldwork_log(self):
+        self.s.add_sample({"code": "MM-1", "source": "B01", "photo": "F-1", "location": "Hold", "material": "Gasket"},
+                          INSPECTOR, self.oid)
+        log = self.s.view(None, self.oid)["register_log"]
+        self.assertEqual([(e["code"], e["action"]) for e in log], [("MM-1", "added")])
+        self.assertEqual(len(self.s.store.register_log(self.oid)), 3)      # source and photo are in the database
+
+
 class RestartWithDatabaseFile(unittest.TestCase):
     """--db keeps data between runs: a restart must not copy the demo ship, and switching to a
     project whose report was read before the restart must still work."""
