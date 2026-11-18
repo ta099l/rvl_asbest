@@ -18,7 +18,12 @@ from app.server import Service
 
 NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
       'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
-      'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"')
+      'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+      'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
+      'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"')
+MANIFEST = ('<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" '
+            'manifest:version="1.2"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>'
+            '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/></manifest:manifest>')
 
 
 def cell(t):
@@ -44,10 +49,24 @@ def section(title, sample_tag="sampleno"):
             + table("r", row("Description", "Details"), row("Source Description", ph("source_description")),
                     row("Quantity", ph("quantity")), row("Conclusions and/or Recommendations", "This concerns"))
             + table("l", row("Sample Number", "Certificate Number"), row(ph("samplenumber"), ph("certificatenumber")))
-            + table("f", row("Foto", ph("samplenumber")), row("Foto", ph("samplenumber"))))
+            + PHOTO_GRID)
 
 
-CONTENT = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {NS}><office:body><office:text>'
+# The photo grid as in RVL's template: 2 columns x 4 rows, in pairs of an image row (an empty paragraph per
+# cell) and a caption row ("Foto | <samplenumber>"). Column widths and cell padding come from automatic styles.
+_IMG = '<table:table-cell table:style-name="f.A1"><text:p text:style-name="P1"/></table:table-cell>'
+_CAP = '<table:table-cell table:style-name="f.A1"><text:p text:style-name="P2">Foto | &lt;samplenumber&gt;</text:p></table:table-cell>'
+PHOTO_GRID = ('<table:table table:name="f"><table:table-column table:style-name="f.A"/><table:table-column table:style-name="f.B"/>'
+              + ("<table:table-row>" + _IMG * 2 + "</table:table-row><table:table-row>" + _CAP * 2 + "</table:table-row>") * 2
+              + "</table:table>")
+AUTOMATIC_STYLES = ('<office:automatic-styles>'
+                    '<style:style style:name="f.A" style:family="table-column"><style:table-column-properties style:column-width="3.15in"/></style:style>'
+                    '<style:style style:name="f.B" style:family="table-column"><style:table-column-properties style:column-width="3.27in"/></style:style>'
+                    '<style:style style:name="f.A1" style:family="table-cell"><style:table-cell-properties fo:padding="0.059in"/></style:style>'
+                    '</office:automatic-styles>')
+
+
+CONTENT = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {NS}>{AUTOMATIC_STYLES}<office:body><office:text>'
            + table("p", row("Project Number", ph("projectnumber")), row("Report Status", ph("reportstatus")))
            + table("i1", row("No.", "Application of Paint", "Name of Paints"), row(ph("no"), ph("application"), ph("paintname")))
            + table("i2", row("No.", "Name of Equipment"), row(ph("no"), ph("equipment")))
@@ -64,6 +83,7 @@ def make_template(path: Path) -> None:
     with zipfile.ZipFile(path, "w") as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/vnd.oasis.opendocument.text", compress_type=zipfile.ZIP_STORED)
         z.writestr("content.xml", CONTENT)
+        z.writestr("META-INF/manifest.xml", MANIFEST)
 
 
 class ExportTests(unittest.TestCase):
@@ -103,8 +123,8 @@ class ExportTests(unittest.TestCase):
         self.s.store.db.execute("DELETE FROM source")          # back to the old, sample-based values
         old = self.content(export(self.s.view(self.rid)["report"], self.tpl))
         cond = re.compile(r"<table:table-row><table:table-cell><text:p>Condition</text:p></table:table-cell>.*?</table:table-row>")
-        # one per Source Record: 8 approved lines + the "No approved samples" record of 2.3.4, 2.3.5 and 2.3.7
-        self.assertEqual(len(cond.findall(new)), 11)
+        # one per bronblad: the 8 demo sources with an approved line (empty sections have no Source Record now)
+        self.assertEqual(len(cond.findall(new)), 8)
         self.assertIn("<text:p>Damaged</text:p>", new)           # B01, the exhaust pipe insulation
         self.assertEqual(cond.sub("", new), cond.sub("", old))   # everything else is the same
 

@@ -391,3 +391,32 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **Tests:** new `app/test_bronbladen.py` (9). Browser checks in local headless Chrome, demo data only: 13 of 13.
 - **Out of scope:** export of the bronblad (P6) and AI-written text (A3).
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-20: Export: one bronblad per source with real photos (made at Tasnim's request, for Ivan to review)
+
+- **Why:** the IHM report with bronbladen is Rolf's main output. Rico: let the tool fill only the project-specific parts.
+- **Source block** (`app/export_odt.py`):
+  - In each 2.3.x section of the template, the block from the paragraph holding `<source_number>` up to and including the photo grid is copied **once per source**.
+  - Each copy holds: its Source Record (with the Condition line), its own lab rows (approved lines of its samples, in this section only) and its own photo grid.
+  - The section's overview table stays one per section.
+  - A section without sources keeps one line: "No samples were taken for this group." It has no empty Source Record and no empty grid.
+- **Which section:** placement stays by the substance in the approved result (as before). A source whose results fall in two sections appears in both, each time with only that section's rows.
+- **Photo grid** (as in RVL's template, checked by Tasnim on an export with fictional data): 2 columns, in pairs of an image row (an empty paragraph per cell) and a caption row ("Foto | <samplenumber>").
+  - The image goes into the empty paragraph.
+  - Only `<samplenumber>` is filled, with "<photo_no> · <sample code> – <description>". "Foto |" stays as it is.
+  - More photos: another pair of rows is copied; **no photo is dropped**.
+  - Unused cells in the last pair stay empty (no "Foto | –").
+  - A photo number without a file prints "photo missing". A source without photos prints "no photo" once.
+- **Images:**
+  - `photo_frame()` returns a `draw:frame` + `draw:image` (`Pictures/<sha256>.jpg`).
+  - Width = the column's `style:column-width` minus the cell padding (each side, from the cell style, default 0.059 in); 7.5 cm when the template does not say. The aspect ratio comes from the photo row, and the height is at most 6 cm.
+  - Each photo is stored once in `Pictures/`, with one `manifest:file-entry` (image/jpeg).
+  - The draw, xlink and svg namespaces are added to `content.xml` when missing.
+- **Zip:** `mimetype` first and stored (it already was). The template's own entries keep their order and dates. New entries (`Pictures/`, a manifest when the template has none) get a fixed date and a fixed order, so the same data gives the same bytes (test).
+- **Draft:** the export is a DRAFT while the report is not signed **or** the link check has errors (warnings do not count). The Report page shows "Link check: N issues (E to fix)", and the button reads "Export as draft (.odt)" in those cases.
+- **Fixed text:** every paragraph outside the source blocks is identical to the template (test on the fixture).
+- **Fixture** (`app/test_export.py`): the photo grid now has the real structure, with column widths, cell padding and a manifest. One existing test expected an empty Source Record in empty sections (11 Condition rows); it now expects 8, one per demo source.
+- **Not checked:** the real template (it is in `context/`) and rendering. LibreOffice is not installed. Tasnim checks by hand (`docs/manual-tests.md`).
+- **Tests:** new `app/test_export_photos.py` (14).
+- **Out of scope:** .docx output (open question for Rolf), changing the template itself.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

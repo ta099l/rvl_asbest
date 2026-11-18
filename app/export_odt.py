@@ -9,7 +9,8 @@ plain text work on content.xml:
 - single values are replaced;
 - a table row holding placeholders is copied once per item (Part I lists,
   sample tables, lab tables, survey limitations);
-- the "Source ... Source Record" heading and its table are copied once per source;
+- in each 2.3.x section the source block (Source Record heading + table, lab table, photo grid) is copied
+  once per source, with that source's own lab rows and photos as real images (Pictures/ + manifest);
 - Table 15 and Table 16 keep their fixed lines and get quantity and unit.
 Anything the app does not know is written as "–", so no placeholder is left behind.
 """
@@ -23,6 +24,7 @@ from xml.sax.saxutils import escape
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT / "context" / "IHM 26-.odt"
 DASH = "–"
+FIXED_DATE = (1980, 1, 1, 0, 0, 0)   # new zip entries: the same data always gives the same bytes
 
 TABLE = re.compile(r"<table:table [^>]*>.*?</table:table>", re.S)
 ROW = re.compile(r"<table:table-row[ >].*?</table:table-row>", re.S)
@@ -58,8 +60,11 @@ def _has(xml: str, *names: str) -> bool:
     return all(f"&lt;{n}&gt;" in xml for n in names)
 
 
-def build_content(xml: str, report: dict, n_sections: int = 7) -> str:
-    """Fill content.xml with the report view of the James app (Service.report_view)."""
+def build_content(xml: str, report: dict, n_sections: int = 7, pictures: Optional[Dict[str, str]] = None) -> str:
+    """Fill content.xml with the report view of the James app (Service.report_view).
+    pictures: filled with sha256 -> file path of every photo the report shows."""
+    pictures = {} if pictures is None else pictures
+    counter = [0]
     ihm = report["ihm"]
     info = dict(ihm["project"])
     v = lambda k: info.get(k) or DASH
@@ -88,18 +93,20 @@ def build_content(xml: str, report: dict, n_sections: int = 7) -> str:
     first = next((i for i, x in enumerate(is_sec) if x), len(tables))
     last = max((i for i, x in enumerate(is_photo) if x), default=-1)
     sections = ihm["sections"][:n_sections]  # 2.3.1 ... 2.3.7 (+ 2.3.8 "Other substances" when added)
-    out, pos, k = [], 0, 0
+    out, pos, k, chunk = [], 0, 0, []
     for i, m in enumerate(tables):
-        out.append(xml[pos:m.start()])
-        pos = m.end()
-        t = m.group(0)
-        if first <= i <= last:
-            sec = sections[k] if k < len(sections) else {"samples": [], "records": [], "lab": []}
-            out.append(_fill_section(t, sec))
+        if first <= i <= last:                       # collect one whole section, up to its photo grid
+            chunk += [xml[pos:m.start()], m.group(0)]
+            pos = m.end()
             if is_photo[i]:
-                k += 1
+                sec = sections[k] if k < len(sections) else {"samples": [], "records": [], "lab": [], "sources": []}
+                out.append(_fill_2_3_section("".join(chunk), sec, xml, pictures, counter))
+                chunk, k = [], k + 1
         else:
-            out.append(_fill_table(t, ihm, single))
+            out.append(xml[pos:m.start()])
+            pos = m.end()
+            out.append(_fill_table(m.group(0), ihm, single))
+    out += chunk
     out.append(xml[pos:])
     xml = "".join(out)
     xml = _fill(xml, single)
@@ -183,25 +190,7 @@ def _fill_section(part: str, sec: dict) -> str:
     if part.startswith("<table:table ") and "Foto" in part:
         photos = [f"{x['photo'] or 'photo missing'} ({x['sample']})" for x in sec["records"]][:4]
         return _fill_in_order(part, "samplenumber", photos)
-    return part                             # Source Records are filled earlier, see _expand_records
-
-
-def _records(xml_block: str, sec: dict) -> str:
-    """Copy 'Source <n> – ... Source Record' heading plus its table once per source."""
-    recs = sec["records"] or [{"source": DASH, "description": "No approved samples in this section", "sample": DASH,
-                               "certificate": DASH, "location": DASH, "material": DASH, "result": DASH,
-                               "quantity": DASH, "conclusion": DASH}]
-    xml_block = _add_condition_row(xml_block)
-    out = []
-    for r in recs:
-        b = _fill(xml_block, {"source_number": f" {r['source']} ", "source_description": r["description"],
-                              "source_condition": r.get("condition") or DASH,
-                              "sample_number": r["sample"], "laboratory_certificate": r["certificate"] or "missing",
-                              "location": r["location"], "material": r["material"], "analysis_results": r["result"],
-                              "quantity": r["quantity"] or "inspector"})
-        b = b.replace(">This concerns<", ">" + escape(r["conclusion"]) + "<", 1)
-        out.append(b)
-    return "".join(out)
+    return part                             # the source block is filled per source, see _fill_2_3_section
 
 
 def _add_condition_row(xml_block: str) -> str:
@@ -215,24 +204,208 @@ def _add_condition_row(xml_block: str) -> str:
     return xml_block[:m.end()] + row + xml_block[m.end():]
 
 
-def _expand_records(xml: str, sections: List[dict]) -> str:
-    """Before filling: find each Source Record (heading paragraph + table) and copy it per source."""
-    pieces, pos, k = [], 0, 0
-    for m in TABLE.finditer(xml):
-        t = m.group(0)
-        if not _has(t, "source_description"):
+# ---------- one bronblad per source: Source Record + its own lab rows + its own photo grid ----------
+# In each 2.3.x section of the template the SOURCE BLOCK runs from the paragraph holding <source_number>
+# up to and including the photo grid (the table with "Foto" and <samplenumber>). The block is copied once
+# per source; everything before it (the section's overview table) and after it stays one per section.
+EMPTY_SECTION = "No samples were taken for this group."
+PHOTO_FALLBACK_CM = 7.5            # when the grid's column width cannot be read from the template
+PHOTO_MAX_HEIGHT_CM = 6.0          # the grid rows keep together: a taller photo would push the row away
+CELL_PADDING_IN = 0.059            # each side, as in RVL's template, when the cell style does not say
+CELL = re.compile(r"<table:table-cell(?: [^>]*)?>.*?</table:table-cell>|<table:table-cell(?: [^>]*)?/>", re.S)
+EMPTY_P = re.compile(r"<text:p((?: [^>]*?)?)\s*/>|<text:p((?: [^>]*)?)></text:p>")
+STORED = re.compile(r"^[0-9a-f]{64}$")
+NS = {"draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0", "xlink": "http://www.w3.org/1999/xlink",
+      "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"}
+
+
+def _cm(length: str) -> Optional[float]:
+    """'3.15in', '8cm', '80mm', '226pt' -> centimetres."""
+    m = re.match(r"^\s*([\d.]+)\s*(in|cm|mm|pt)\s*$", length or "")
+    if not m:
+        return None
+    return float(m.group(1)) * {"in": 2.54, "cm": 1.0, "mm": 0.1, "pt": 2.54 / 72}[m.group(2)]
+
+
+def _styles(content: str, family: str) -> Dict[str, str]:
+    """style name -> the attributes of its properties tag, for one style family in content.xml."""
+    out = {}
+    for m in re.finditer(r'<style:style ([^>]*)>(.*?)</style:style>', content, re.S):
+        attrs = m.group(1)
+        if f'style:family="{family}"' not in attrs:
             continue
-        head = xml.rfind("&lt;source_number&gt;", pos, m.start())
-        if head < 0:
-            continue
-        start = max(xml.rfind("<text:p ", pos, head), xml.rfind("<text:h ", pos, head))
-        sec = sections[k] if k < len(sections) else {"records": []}
-        k += 1
-        pieces.append(xml[pos:start])
-        pieces.append(_records(xml[start:m.end()], sec))
+        name = re.search(r'style:name="([^"]+)"', attrs)
+        if name:
+            out[name.group(1)] = m.group(2)
+    return out
+
+
+def photo_cell_widths(content: str, grid: str) -> List[float]:
+    """Usable width in cm of each photo column: the column's style:column-width minus the cell padding."""
+    cols = _styles(content, "table-column")
+    cells = _styles(content, "table-cell")
+    widths = []
+    for m in re.finditer(r"<table:table-column ([^>]*)/>", grid):
+        name = re.search(r'table:style-name="([^"]+)"', m.group(1))
+        rep_ = re.search(r'table:number-columns-repeated="(\d+)"', m.group(1))
+        w = re.search(r'style:column-width="([^"]+)"', cols.get(name.group(1), "")) if name else None
+        widths += [_cm(w.group(1)) if w else None] * (int(rep_.group(1)) if rep_ else 1)
+    pad = CELL_PADDING_IN * 2.54
+    cell = next(iter(re.findall(r'<table:table-cell [^>]*table:style-name="([^"]+)"', grid)), None)
+    if cell and cell in cells:
+        m = re.search(r'fo:padding(?:-left)?="([^"]+)"', cells[cell])
+        if m and _cm(m.group(1)) is not None:
+            pad = _cm(m.group(1))
+    return [round(w - 2 * pad, 3) if w else PHOTO_FALLBACK_CM for w in widths]
+
+
+def photo_size(width_px: int, height_px: int, cell_cm: float, max_h_cm: float = PHOTO_MAX_HEIGHT_CM):
+    """(width, height) in cm: as wide as the cell, the photo's own aspect ratio, never taller than max_h_cm."""
+    w = cell_cm
+    h = w * height_px / width_px if width_px else max_h_cm
+    if h > max_h_cm:
+        h, w = max_h_cm, max_h_cm * width_px / height_px
+    return round(w, 3), round(h, 3)
+
+
+def photo_frame(sha: str, width_px: int, height_px: int, cell_cm: float, name: str) -> str:
+    """A draw:frame with the photo as Pictures/<sha256>.jpg, anchored as a character in its paragraph."""
+    if not STORED.match(sha or ""):
+        raise ValueError("not a stored photo name")
+    w, h = photo_size(width_px, height_px, cell_cm)
+    return (f'<draw:frame draw:name="{escape(name, {chr(34): "&quot;"})}" text:anchor-type="as-char" '
+            f'svg:width="{w}cm" svg:height="{h}cm" draw:z-index="0">'
+            f'<draw:image xlink:href="Pictures/{sha}.jpg" xlink:type="simple" xlink:show="embed" '
+            f'xlink:actuate="onLoad" draw:mime-type="image/jpeg"/></draw:frame>')
+
+
+def photo_caption(p: dict) -> str:
+    """What follows the template's 'Foto | ': '<photo_no> · <sample code> – <description>' (not escaped)."""
+    rest = p.get("description") or "" if p.get("file") else "photo missing"
+    return f"{p['photo_no']} · {p.get('sample') or DASH}" + (f" – {rest}" if rest else "")
+
+
+def _fill_image_row(row: str, chunk: List[dict], widths: List[float], pictures: Dict[str, str], counter: List[int]) -> str:
+    out, pos = [], 0
+    for j, m in enumerate(CELL.finditer(row)):
+        cell = m.group(0)
+        if j < len(chunk) and chunk[j].get("file"):
+            p = chunk[j]
+            counter[0] += 1
+            frame = photo_frame(p["sha"], p["width"], p["height"], widths[j] if j < len(widths) else PHOTO_FALLBACK_CM,
+                                f"Foto {p['photo_no']} ({counter[0]})")
+            pictures.setdefault(p["sha"], p["path"])
+            e = EMPTY_P.search(cell)
+            if e:                                    # the template's empty paragraph gets the image
+                attrs = e.group(1) if e.group(1) is not None else (e.group(2) or "")
+                cell = cell[:e.start()] + f"<text:p{attrs}>{frame}</text:p>" + cell[e.end():]
+        out.append(row[pos:m.start()] + cell)
         pos = m.end()
-    pieces.append(xml[pos:])
-    return "".join(pieces)
+    return "".join(out) + row[pos:]
+
+
+def _fill_caption_row(row: str, chunk: List[dict], none_text: Optional[str]) -> str:
+    """Fill <samplenumber> per photo, keeping 'Foto |'. A cell without a photo is left empty (no 'Foto | –')."""
+    out, pos, c = [], 0, 0
+    for m in CELL.finditer(row):
+        cell = m.group(0)
+        if "&lt;samplenumber&gt;" in cell:
+            if c < len(chunk):
+                cell = cell.replace("&lt;samplenumber&gt;", escape(photo_caption(chunk[c])), 1)
+            elif c == 0 and none_text:
+                cell = cell.replace("&lt;samplenumber&gt;", escape(none_text), 1)
+            else:
+                cell = re.sub(r"<text:p((?: [^>]*)?)>(?:(?!</text:p>).)*&lt;samplenumber&gt;.*?</text:p>",
+                              lambda x: f"<text:p{x.group(1)}/>", cell, count=1, flags=re.S)
+            c += 1
+        out.append(row[pos:m.start()] + cell)
+        pos = m.end()
+    return "".join(out) + row[pos:]
+
+
+def fill_photo_grid(grid: str, photos: List[dict], widths: List[float], pictures: Dict[str, str],
+                    counter: Optional[List[int]] = None) -> str:
+    """The template's grid is pairs of rows: an image row (empty paragraphs) and a caption row ('Foto |
+    <samplenumber>'). One pair per two photos: more than four photos add pairs, no photo is ever dropped."""
+    counter = counter if counter is not None else [0]
+    rows = list(ROW.finditer(grid))
+    caps = [i for i, m in enumerate(rows) if "&lt;samplenumber&gt;" in m.group(0)]
+    if not caps or caps[0] == 0:                 # not the expected layout: text only, as before
+        return _fill_in_order(grid, "samplenumber", [photo_caption(p) for p in photos])
+    img_tpl, cap_tpl = rows[caps[0] - 1].group(0), rows[caps[0]].group(0)
+    per_row = max(1, cap_tpl.count("&lt;samplenumber&gt;"))
+    pairs = []
+    for k in range(max(1, -(-len(photos) // per_row))):
+        chunk = photos[k * per_row:(k + 1) * per_row]
+        pairs.append(_fill_image_row(img_tpl, chunk, widths, pictures, counter)
+                     + _fill_caption_row(cap_tpl, chunk, "no photo" if not photos else None))
+    return grid[:rows[caps[0] - 1].start()] + "".join(pairs) + grid[rows[caps[-1]].end():]
+
+
+def _source_block(block: str, src: dict, content: str, pictures: Dict[str, str], counter: List[int]) -> str:
+    b = _add_condition_row(block)
+    b = _fill(b, {"source_number": f" {src['source']} ", "source_description": src["description"],
+                  "source_condition": src.get("condition") or DASH,
+                  "sample_number": ", ".join(src["samples"]), "laboratory_certificate": src["certificate"] or "missing",
+                  "location": src["location"], "material": src["material"], "analysis_results": src["result"],
+                  "quantity": src["quantity"] or "inspector"})
+    b = b.replace(">This concerns<", ">" + escape(src["conclusion"]) + "<", 1)
+
+    def table(m):
+        t = m.group(0)
+        if _has(t, "certificatenumber"):           # this source's own lab rows only
+            items = [{"samplenumber": x["sample"], "certificatenumber": x["certificate"] or "missing",
+                      "analysismethod": x["method"] or DASH, "analysisresult": x["result"], "sampleremarks": x["remarks"] or DASH,
+                      "quantity": x["quantity"] or DASH} for x in src["lab"]]
+            return repeat_row(t, items, {"samplenumber": DASH})
+        if "Foto" in t and _has(t, "samplenumber"):
+            return fill_photo_grid(t, src["photos"], photo_cell_widths(content, t), pictures, counter)
+        return t
+    return TABLE.sub(table, b)
+
+
+def _fill_2_3_section(chunk: str, sec: dict, content: str, pictures: Dict[str, str], counter: List[int]) -> str:
+    """One 2.3.x section of the template: the overview table once, the source block once per source."""
+    rec = next((m for m in TABLE.finditer(chunk) if _has(m.group(0), "source_description")), None)
+    head = chunk.rfind("&lt;source_number&gt;", 0, rec.start()) if rec else -1
+    grid = next((m for m in TABLE.finditer(chunk, rec.end()) if "Foto" in m.group(0)), None) if rec else None
+    if rec is None or head < 0 or grid is None:   # a template without that block: fill table by table
+        return TABLE.sub(lambda m: _fill_section(m.group(0), sec), chunk)
+    start = max(chunk.rfind("<text:p ", 0, head), chunk.rfind("<text:p>", 0, head), chunk.rfind("<text:h ", 0, head))
+    before, block, after = chunk[:start], chunk[start:grid.end()], chunk[grid.end():]
+    fill = lambda part: TABLE.sub(lambda m: _fill_section(m.group(0), sec), part)
+    if not sec.get("sources"):
+        tag = re.match(r"<(text:[ph])((?: [^>]*)?)>", block)
+        middle = f"<{tag.group(1)}{tag.group(2)}>{escape(EMPTY_SECTION)}</{tag.group(1)}>"
+    else:
+        middle = "".join(_source_block(block, s, content, pictures, counter) for s in sec["sources"])
+    return fill(before) + middle + fill(after)
+
+
+def ensure_namespaces(content: str) -> str:
+    """Images need the draw, xlink and svg namespaces on the root element; add the ones that are missing."""
+    m = re.search(r"<office:document-content\b[^>]*>", content)
+    if not m:
+        return content
+    tag = m.group(0)
+    extra = "".join(f' xmlns:{k}="{v}"' for k, v in NS.items() if f"xmlns:{k}=" not in tag)
+    return content[:m.end() - 1] + extra + content[m.end() - 1:] if extra else content
+
+
+MANIFEST_EMPTY = ('<?xml version="1.0" encoding="UTF-8"?><manifest:manifest '
+                  'xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">'
+                  '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>'
+                  '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+                  '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>'
+                  '</manifest:manifest>')
+
+
+def manifest_with_pictures(manifest: Optional[str], shas: List[str]) -> str:
+    """Every Pictures/<sha>.jpg gets exactly one manifest:file-entry (image/jpeg)."""
+    xml = manifest or MANIFEST_EMPTY
+    entries = "".join(f'<manifest:file-entry manifest:full-path="Pictures/{sha}.jpg" manifest:media-type="image/jpeg"/>'
+                      for sha in dict.fromkeys(shas) if f'manifest:full-path="Pictures/{sha}.jpg"' not in xml)
+    return xml.replace("</manifest:manifest>", entries + "</manifest:manifest>", 1)
 
 
 def _codes(codes: List[str], limit: int = 10) -> str:
@@ -375,22 +548,35 @@ def export(report: dict, template: Optional[Path] = None) -> bytes:
         if len(sections) > 7 and (sections[7]["samples"] or sections[7]["lab"] or sections[7]["records"]):
             content = add_other_section(content)
             n = 8
-        content = _expand_records(content, sections[:n])
-        content = build_content(content, report, n)
+        content = ensure_namespaces(content)
+        pictures: Dict[str, str] = {}
+        content = build_content(content, report, n, pictures)
         styles = fill_styles(src.read("styles.xml").decode("utf-8"), report) if "styles.xml" in src.namelist() else None
         import io
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as dst:
             # ODF rule: 'mimetype' first and uncompressed, so office programs recognise the file
             dst.writestr(zipfile.ZipInfo("mimetype"), src.read("mimetype"), compress_type=zipfile.ZIP_STORED)
-            for item in src.infolist():
+            names = set(src.namelist())
+            manifest = manifest_with_pictures(src.read("META-INF/manifest.xml").decode("utf-8")
+                                              if "META-INF/manifest.xml" in names else None, list(pictures))
+            for item in src.infolist():               # the template's own entries, in their order and dates
                 if item.filename == "mimetype":
                     continue
                 if item.filename == "content.xml":
                     data = content.encode("utf-8")
                 elif item.filename == "styles.xml" and styles is not None:
                     data = styles.encode("utf-8")
+                elif item.filename == "META-INF/manifest.xml":
+                    data = manifest.encode("utf-8")
                 else:
                     data = src.read(item.filename)
                 dst.writestr(item, data, compress_type=zipfile.ZIP_DEFLATED)
+            if "META-INF/manifest.xml" not in names:
+                dst.writestr(zipfile.ZipInfo("META-INF/manifest.xml", date_time=FIXED_DATE), manifest,
+                             compress_type=zipfile.ZIP_DEFLATED)
+            for sha, path in pictures.items():          # the photos, once each, in the order the report shows them
+                if f"Pictures/{sha}.jpg" not in names:
+                    dst.writestr(zipfile.ZipInfo(f"Pictures/{sha}.jpg", date_time=FIXED_DATE), Path(path).read_bytes(),
+                                 compress_type=zipfile.ZIP_STORED)
     return buf.getvalue()

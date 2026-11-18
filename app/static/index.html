@@ -1048,6 +1048,7 @@ function reportPage() {
 function wireReport() {
   wirePick("report");
   const ex = $("#export"); if (ex) ex.onclick = () => downloadReport(currentReport);
+  const tb = $("#to-bronbladen"); if (tb) tb.onclick = () => go(href("bronbladen"));
   const sg = $("#sign"); if (sg) sg.onclick = () => { if (needName()) return; post("/api/sign", { report_id: currentReport, by: inspector }).catch(() => {}); };
 }
 
@@ -1210,6 +1211,7 @@ const missing = (v) => v ? esc(v) : '<span class="miss">missing</span>';
 
 function reportCard(r) {
   const m = r.ihm, signed = r.signed;
+  const linkIssues = (S.link_check || []).length, linkErrors = (S.link_check || []).filter(i => i.severity === "error").length;
   const empty = (t) => `<div class="empty">${t}</div>`;
   const insp = (v) => v ? esc(v) : '<span class="small">inspector</span>';
   const project = tbl(["Project Information", "Details"], m.project.map(([k, v]) => [esc(k), v ? esc(v) : '<span class="small">–</span>']));
@@ -1255,7 +1257,10 @@ function reportCard(r) {
   return `<section class="panel report-card ${signed ? "signed-final" : ""}" style="margin-top:24px">
     ${panelHead("Step 5 · Output · approved lines only", "Inventory of Hazardous Materials · Part 1",
         "Laid out like the RVL IHM template. Classification, Part I list and thresholds are proposals the inspector checks. " + esc(S.thresholds_note || ""),
-        `<div class="actions"><span class="pill ${signed ? "p-approved" : "p-check"}">${signed ? "Final" : "Draft"}</span>${r.practice ? "" : `<button id="export" class="primary">Download IHM report (.odt)</button>`}</div>`)}
+        `<div class="actions"><span class="pill ${signed && !linkErrors ? "p-approved" : "p-check"}">${signed && !linkErrors ? "Final" : "Draft"}</span>${r.practice ? "" : `<button id="export" class="primary">${signed && !linkErrors ? "Download IHM report (.odt)" : "Export as draft (.odt)"}</button>`}</div>`)}
+    ${Array.isArray(S.link_check) ? `<div class="panel-body" style="padding-bottom:0"><div class="callout ${linkIssues ? "warn" : "ok"}">${linkIssues
+        ? `<b>Link check: ${linkIssues} issue${linkIssues === 1 ? "" : "s"}</b> (${linkErrors} to fix). ${linkErrors ? "The export stays a draft until they are fixed." : ""} <button class="linkish" id="to-bronbladen">Open the bronbladen</button>`
+        : "<b>Link check: all links complete.</b>"}</div></div>` : ""}
     <div class="panel-body">
       <p class="small">The download is RVL's IHM template filled with the approved lines${signed ? "" : ", marked as DRAFT until it is signed"}. Word and LibreOffice open .odt files. Other chapters (desk research, consultation, VSCP) stay for the surveyor to write.</p>
       <p class="small" style="margin-top:4px">${timing}</p>

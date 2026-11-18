@@ -437,6 +437,11 @@ class Service:
             if self.is_practice(rid):
                 raise ValueError("a practice report cannot be exported")
             view = self.report_view(rid, self.store.register(self.report_object(rid)))
+            errors = [i for i in self.link_check(self.report_object(rid)) if i["severity"] == "error"]
+            if errors and view["signed"]:            # signed, but links are broken: the file is still a draft
+                view = dict(view, signed=None)
+                view["ihm"] = dict(view["ihm"], project=[(k, "Draft" if k == "Report Status" else v)
+                                                        for k, v in view["ihm"]["project"]])
             data = export_odt.export(view)
             project = re.sub(r"[^A-Za-z0-9-]+", "_", dict(view["ihm"]["project"])["Project Number"] or "project")
             self.log(rid, f"IHM report exported to the RVL template ({'final' if view['signed'] else 'draft'}).")
@@ -978,6 +983,9 @@ class Service:
                         "restriction": s.restriction or "Not sampled",
                         "follow_up": "Treat as potentially containing hazardous materials (PCHM) until sampled"}
                        for i, s in enumerate(self.store.limitations(oid))]
+        photo_rows = self.store.photos(oid)
+        for sec in sections.values():
+            sec["sources"] = self.section_sources(oid, sec, photo_rows)
         tables = {"A": [], "B": []}
         for label, t, _, _ in TABLE_LINES:
             ln = lines.get(label)
@@ -986,6 +994,39 @@ class Service:
                               "quantity": total, "unit": unit, "found": bool(ln)})
         return {"project": project, "sections": list(sections.values()), "part1": part1, "part1_titles": PART_I,
                 "limitations": limitations, "table_a": tables["A"], "table_b": tables["B"], "manual": manual}
+
+    def section_sources(self, oid: int, sec: dict, photo_rows) -> List[dict]:
+        """One bronblad per source for this 2.3.x section: its record (merged over its samples), only its own
+        lab rows of this section, and its photos in upload order with the file to put in the .odt."""
+        out: Dict[str, dict] = {}
+        for rec in sec["records"]:
+            key = rec["source"] if rec["source"] not in ("", "–") else f"– ({rec['sample']})"
+            out.setdefault(key, {"source": key, "recs": []})["recs"].append(rec)
+        result = []
+        for key, g in out.items():
+            recs = g["recs"]
+            samples = list(dict.fromkeys(r["sample"] for r in recs))
+            uniq = lambda k, sep="; ": sep.join(dict.fromkeys(r[k] for r in recs if r[k]))
+            linked = sorted((r for r in photo_rows
+                             if (key == recs[0]["source"] and r["source_no"] == key) or r["sample_code"] in samples),
+                            key=lambda r: (r["sort_order"] or 0, r["id"]))
+            pics = []
+            for r in linked:
+                path = photos.photo_path(self.data_dir, oid, r["stored_name"]) if r["stored_name"] else None
+                pics.append({"photo_no": r["photo_no"], "sample": r["sample_code"] or r["source_no"],
+                             "description": r["description"] or "", "file": bool(path and path.is_file()),
+                             "sha": r["stored_name"], "width": r["width"] or 4, "height": r["height"] or 3,
+                             "path": str(path) if path else None})
+            result.append({
+                "source": key, "samples": samples, "description": recs[0]["description"],
+                "condition": recs[0].get("condition") or "", "quantity": recs[0]["quantity"],
+                "certificate": uniq("certificate", ", "), "location": uniq("location"), "material": uniq("material"),
+                "result": "; ".join(f"{r['sample']}: {r['result']}" for r in recs) if len(samples) > 1 else uniq("result"),
+                "conclusion": uniq("conclusion", " "),
+                "lab": [x for x in sec["lab"] if x["sample"] in samples],
+                "photos": pics,
+            })
+        return result
 
     def open_items(self, rid: int, rows: List[dict], flags: List[dict], ihm: dict) -> List[str]:
         out = []

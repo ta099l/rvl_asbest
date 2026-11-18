@@ -111,3 +111,25 @@ Type a name in the **Inspector** field at the top before you approve, register o
 **Still for a person:**
 - [ ] Read a full bronblad next to a real (anonymised) Source Record from RVL: are the fields in the same order, and is anything missing?
 - [ ] Go through all bronbladen with only the Next button, as Rolf would.
+
+## Export with bronbladen and photos (20 Nov 2026), by hand in LibreOffice and Word
+
+**Make the file:**
+1. `.venv/bin/python app/demo/make_demo_photos.py`, then `.venv/bin/python app/server.py --db test_export.db`.
+2. Open MV Noorderlicht. On **Fieldwork → Upload photos**, select all files in `data/demo_photos`, then **Accept all proposals**.
+3. On **Lab results**, approve every line that has a proposal and reject MM-9.
+4. On **Report**, click **Export as draft (.odt)**.
+
+**Look at:**
+- [ ] LibreOffice opens the file **without** "The file is corrupt / repair?". So does Word.
+- [ ] 2.3.1 Asbestos has one Source Record each for B01, B02 and B03; 2.3.2 PCB's for B05, B06 and B09; 2.3.3 ODS for B07; 2.3.6 Heavy metals for B08. **No source appears twice.**
+- [ ] Every Source Record has a **Condition** row right below Source Description.
+- [ ] Each source's lab table lists **only its own** sample numbers.
+- [ ] Under each source: its own photos, visible, at most 6 cm high, not stretched. Under each one: "Foto | F-0xx · MM-1 – <description>".
+- [ ] B01 has 5 photos: three pairs of rows, the last right-hand cell **empty** (no "Foto | –").
+- [ ] A photo number without a file shows "Foto | F-0xx · … – photo missing" and no picture.
+- [ ] 2.3.4 PFOS, 2.3.5 HBCDD and 2.3.7 Radioactive say "No samples were taken for this group." once, with no empty table under it.
+- [ ] Rows with photos do not break across pages (the template's keep-together).
+- [ ] The cover says Draft, and the file name ends in `_DRAFT.odt`.
+- [ ] All standard text (chapters, headings, the Summary) reads exactly as in the template.
+- [ ] Count: open the .odt as a zip (rename to .zip): the number of files in `Pictures/` equals the number of photos with a picture in the document.
