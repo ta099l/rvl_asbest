@@ -92,3 +92,22 @@ Type a name in the **Inspector** field at the top before you approve, register o
 - [ ] Upload a real (fictional) phone photo with GPS, download it with right-click → Open image in new tab, and check no location data is left (for example in Windows Properties → Details).
 - [ ] Upload a 15 MB photo in one window and click around in another window meanwhile.
 - [ ] Try an iPhone HEIC photo: expect "please export it as JPG".
+
+## Bronbladen page (20 Nov 2026)
+
+**Checked by script (20 Nov 2026):** local headless Chrome, demo ship. 13 of 13 checks passed.
+
+- [x] The left list shows the 10 sources under Asbestos, PCB, Heavy metals and ODS; the first one is open; the link check is folded.
+- [x] A line not yet decided shows "Waiting for approval" and no result value.
+- [x] **Next** goes from B01 to the last bronblad (B07) in 9 clicks; the page does not scroll.
+- [x] ← goes back one; refresh keeps the selected bronblad.
+- [x] After approving MM-1, B01 shows its result and certificate C-4471-01.
+- [x] After Change decision → Reject, B01 says "Needs attention" and "Link rejected – choose the right sample on Lab results".
+- [x] Changing Condition shows "Saved ✓"; Condition and Conclusions survive a refresh.
+- [x] With 6 photos on B02: 4 shown, "+2 more" shows all 6, plus the "at most 4 photos" warning.
+- [x] New source with an unlinked sample creates B11 in the PCB group and opens it.
+- [x] No horizontal scroll at 768 px; no script errors.
+
+**Still for a person:**
+- [ ] Read a full bronblad next to a real (anonymised) Source Record from RVL: are the fields in the same order, and is anything missing?
+- [ ] Go through all bronbladen with only the Next button, as Rolf would.

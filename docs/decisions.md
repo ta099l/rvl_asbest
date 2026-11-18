@@ -358,3 +358,36 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
   - The link-check tests produce every rule and check it disappears after its fix.
   - Browser checks in local headless Chrome, demo data only: 13 of 13.
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-20: Bronbladen page: each source as its Source Record, edited in place (made at Tasnim's request, for Ivan to review)
+
+- **Why:** "The bronbladen are the core of the report." Rico: work back from the final product, and start with the bronblad.
+- **Server** (`app/server.py`):
+  - `Service.bronbladen(oid)` gives every source in the fieldwork group order (P2), in the view JSON as `bronbladen`.
+  - Each source carries: status, its own link-check issues, the source fields, its samples, certificates and results from **approved lab lines only**, the lab table, its photos in upload order, and `too_many_photos`.
+  - Lab line states:
+    - A line still waiting for a decision is listed as "waiting" **without its value**.
+    - A rejected line is listed as "rejected", also without its value.
+    - A **corrected** line counts for the sample it was corrected to and disappears from the bronblad of the sample the agent proposed (test).
+  - The link check now tags each issue with its source (`source`), so the bronblad status and the list cannot disagree.
+- **Status:**
+  - **Not accessible:** assessment PCHM or not accessible, or every sample of the source is "not sampled".
+  - **Needs attention:** at least one link-check **error** for that source. Warnings are shown but do not change the status.
+  - **Complete:** otherwise.
+  - "Unapproving" is Change decision → Reject on Lab results (agreed; no new decision state). The bronblad turns "Needs attention" at once.
+- **Routes:**
+  - `POST /api/source-update` autosaves source fields: description, condition, quantity, unit, assessment, conclusion, drawing. Condition comes from `conditions.json`; assessment from the store's list (now sent in the view as `assessments`).
+  - `POST /api/source-new` creates the next number (`B11` after `B10`) in a group and links the chosen samples and photos **that have no source yet**.
+  - Both take `object` and log in `register_log`.
+  - The "next number in the project's format" rule now lives in one function, `photos.next_number`, for photo and source numbers.
+- **Not editable on the bronblad (agreed):** location, deck and material belong to the samples (changing them marks lab proposals out of date). They are shown read-only, with an "edit on Fieldwork" link.
+- **Screen:**
+  - **Left:** sources per group with a status pill.
+  - **Right:** the Source Record in the template's field order, then the lab table, then photos as "Foto <no> | <description>". Four are shown; "+N more" shows all.
+  - Fields save on change, with "Saved ✓ hh:mm".
+  - Previous and Next buttons, plus ← and → (not while typing in a field). The selected source is in the address (`#/p/1/bronbladen/B03`): refresh keeps it, and Previous/Next do not add history entries.
+  - The full link-check list is a fold-out bar at the top, with Fix buttons as before.
+- **Demo page:** `mock_api.js` sends no bronbladen; the page says it needs the James app.
+- **Tests:** new `app/test_bronbladen.py` (9). Browser checks in local headless Chrome, demo data only: 13 of 13.
+- **Out of scope:** export of the bronblad (P6) and AI-written text (A3).
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

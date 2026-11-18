@@ -366,6 +366,20 @@ class Store:
         return {r["code"] for r in self.db.execute(
             "SELECT code FROM register_log WHERE object_id=? AND action='check confirmed'", (object_id,))}
 
+    def create_source(self, object_id: int, source_no: str, substance_group: Optional[str], by: str) -> None:
+        """A new, empty source (bronblad). Its number is new in this project; logged."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        no = (source_no or "").strip()
+        if not no:
+            raise ValueError("a source needs a number")
+        if no in self.sources(object_id):
+            raise ValueError(f"source {no} already exists in this project")
+        with self.db:
+            self.db.execute("INSERT INTO source(object_id,source_no,substance_group,updated_by,updated_at) VALUES (?,?,?,?,?)",
+                            (object_id, no, substance_group, by.strip(), _now()))
+            self._log_register(object_id, no, "source added", f"new source ({substance_group or 'no group'})", by)
+
     def update_source(self, object_id: int, source_no: str, changes: Dict[str, str], by: str) -> None:
         """Change the details of a source (bronblad). Logged old -> new; the source number never changes."""
         if not (by or "").strip():

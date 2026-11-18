@@ -43,12 +43,12 @@ from ai.james_ai.contract import ContractError          # noqa: E402
 from app import export_odt, photos                      # noqa: E402
 from app.auth import COOKIE, LOGIN_PAGE, SESSION_SECONDS, Auth, parse_users  # noqa: E402
 from app.demo_data import SHIP                          # noqa: E402
-from app.ihm import (GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_for_code,  # noqa: E402
+from app.ihm import (GROUP_LABEL, GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_for_code,  # noqa: E402
                      group_section, load_thresholds, next_code, part_i, sample_type, section_2_3,
                      sum_quantities, table_line)
 from ai.james_ai.hybrid import HybridRun, hybrid        # noqa: E402
 from ai.james_ai.linker import Sample                   # noqa: E402
-from james.store import EDITABLE, OBJECT_FIELDS, PROJECT_INFO, SOURCE_PHOTO_ACTIONS, Store   # noqa: E402
+from james.store import ASSESSMENTS, EDITABLE, OBJECT_FIELDS, PROJECT_INFO, SOURCE_PHOTO_ACTIONS, Store   # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 # The condition values of a source, in one place (to confirm with Rolf).
@@ -569,8 +569,11 @@ class Service:
         rows = self.store.photos(oid)
         issues: List[dict] = []
 
-        def add(rule, severity, text, fix, key=None):
-            issues.append({"rule": rule, "severity": severity, "text": text, "fix": fix, "key": key})
+        src_of = {s.id: (s.source or "").strip() or None for s in reg}
+
+        def add(rule, severity, text, fix, key=None, source=None):
+            # source: the bronblad this issue belongs to (None: it belongs to no single source)
+            issues.append({"rule": rule, "severity": severity, "text": text, "fix": fix, "key": key, "source": source})
 
         group = lambda code: group_for_code(code)["key"]
         for r in rows:
@@ -582,9 +585,9 @@ class Service:
             n = sum(1 for r in rows if r["stored_name"] and (r["source_no"] == no or r["sample_code"] in codes))
             fix = {"page": "fieldwork", "photos": True, "group": group(codes[0]) if codes else None}
             if n == 0:
-                add("source_no_photo", "error", f"Source {no} has no photo yet" + (f" ({', '.join(codes)})." if codes else "."), fix)
+                add("source_no_photo", "error", f"Source {no} has no photo yet" + (f" ({', '.join(codes)})." if codes else "."), fix, source=no)
             elif n > 4:
-                add("source_too_many", "error", f"Source {no} has {n} photos; a bronblad holds at most 4. Unlink the extra ones.", fix)
+                add("source_too_many", "error", f"Source {no} has {n} photos; a bronblad holds at most 4. Unlink the extra ones.", fix, source=no)
         for s in reg:
             if not (s.source or "").strip():
                 add("sample_no_source", "error", f"Sample {s.id} has no source number.",
@@ -606,12 +609,13 @@ class Service:
                 fix = ({"page": "lab", "report": line[0], "line": line[1]["idx"]} if line
                        else {"page": "fieldwork", "group": group(s.id), "sample": s.id})
                 add("sample_no_result", "error", f"Sample {s.id} has no approved lab result. "
-                    + ("Approve its lab line." if line else "Read the lab report with its result, or register it as not sampled with the reason."), fix)
+                    + ("Approve its lab line." if line else "Read the lab report with its result, or register it as not sampled with the reason."),
+                    fix, source=src_of.get(s.id))
         for rid, r, d in lines:
             raw = (r["raw_id"] or "").strip()
             if d and d["state"] in ("approved", "corrected") and not (r["certificate"] or "").strip():
                 add("result_no_certificate", "error", f"Approved result {raw or 'line ' + str(r['idx'] + 1)} → {d['sample_code']} has no certificate number.",
-                    {"page": "lab", "report": rid, "line": r["idx"]})
+                    {"page": "lab", "report": rid, "line": r["idx"]}, source=src_of.get(d["sample_code"]))
             if raw and raw != "-" and d is None and alias_key(raw) not in keys:
                 add("code_not_in_register", "error", f"Lab line {r['idx'] + 1}: code {raw} is not in the register.",
                     {"page": "lab", "report": rid, "line": r["idx"]})
@@ -620,7 +624,7 @@ class Service:
             k = alias_key(s.id)
             if k and k in seen:
                 add("same_sample_twice", "error", f"{seen[k]} and {s.id} are the same sample in two notations.",
-                    {"page": "fieldwork", "group": group(s.id), "sample": s.id})
+                    {"page": "fieldwork", "group": group(s.id), "sample": s.id}, source=src_of.get(s.id))
             elif k:
                 seen[k] = s.id
         confirmed = self.store.confirmed_checks(oid)
@@ -634,6 +638,113 @@ class Service:
                             {"confirm": key}, key)
         issues.sort(key=lambda i: i["severity"] != "error")
         return issues
+
+    # ---------- bronbladen: one Source Record per source, built from approved lab lines only ----------
+    def bronbladen(self, oid: int, issues: Optional[List[dict]] = None) -> List[dict]:
+        """Every source as its bronblad, in the order of the fieldwork groups (P2).
+
+        Lab values come only from inspector-approved lines (CLAUDE.md rule 1). A line still waiting for a
+        decision, or one whose link was rejected, is listed without its value. A corrected line counts for
+        the sample it was corrected to, not for the one the agent proposed.
+        """
+        reg = self.store.register(oid)
+        sources = self.store.sources(oid)
+        issues = self.link_check(oid) if issues is None else issues
+        rows = self.store.photos(oid)
+        lines = []
+        for rep_ in self.store.db.execute("SELECT id, label, report_ref FROM lab_report WHERE object_id=? ORDER BY id", (oid,)).fetchall():
+            if self.is_practice(rep_["id"]):
+                continue
+            dec = self.store.current_decisions(rep_["id"])
+            for r in self.store.rows(rep_["id"]):
+                lines.append((rep_, r, dec.get(r["idx"])))
+        order = {g: i for i, (g, _, _, _) in enumerate(GROUPS)}
+        out = []
+        for no, src in sources.items():
+            samples = [x for x in reg if x.source == no]
+            codes = {x.id for x in samples}
+            group = src["substance_group"] or (group_for_code(samples[0].id)["key"] if samples else "other")
+            lab, results, certs, finds = [], [], [], []
+            for rep_, r, d in lines:
+                proposed = r["ai_code"] or r["proposed_code"]
+                base = {"report": rep_["id"], "report_label": rep_["report_ref"] or rep_["label"], "line": r["idx"] + 1,
+                        "idx": r["idx"], "raw_id": r["raw_id"] or ""}
+                if d and d["state"] in ("approved", "corrected") and d["sample_code"] in codes:
+                    lab.append({**base, "state": "approved", "sample": d["sample_code"], "certificate": r["certificate"] or "",
+                                "method": r["method"] or "", "result": r["result"] or "", "remarks": r["remarks"] or "",
+                                "quantity": r["quantity"] or ""})
+                    results.append(f"{d['sample_code']}: {r['result']}")
+                    if r["certificate"]:
+                        certs.append(r["certificate"])
+                    finds += findings(r["result"], r["method"] or "", r["raw_id"] or "", self.thresholds)
+                elif d and d["state"] == "rejected" and proposed in codes:
+                    lab.append({**base, "state": "rejected", "sample": proposed})
+                elif d is None and proposed in codes:
+                    lab.append({**base, "state": "waiting", "sample": proposed})
+            linked = sorted((r for r in rows if r["source_no"] == no or r["sample_code"] in codes),
+                            key=lambda r: (r["sort_order"] or 0, r["id"]))
+            with_file = [r for r in linked if r["stored_name"]]
+            mine = [i for i in issues if i.get("source") == no]
+            if (src["assessment"] in ("PCHM", "not accessible")
+                    or (samples and all(x.status == "not sampled" for x in samples))):
+                status = "not_accessible"
+            elif any(i["severity"] == "error" for i in mine):
+                status = "attention"
+            else:
+                status = "complete"
+            auto = " ".join(f"This concerns {f['name']}: {f['note']}." for f in finds if f["key"]) or ""
+            out.append({
+                "no": no, "group": group, "group_label": GROUP_LABEL.get(group, group), "status": status, "issues": mine,
+                "description": src["description"] or "", "condition": src["condition"] or "", "quantity": src["quantity"] or "",
+                "unit": src["unit"] or "", "assessment": src["assessment"] or "", "conclusion": src["conclusion"] or "",
+                "drawing": src["drawing"] or "",
+                "description_auto": ", ".join(dict.fromkeys(", ".join(x for x in (x.part, x.material) if x) for x in samples)),
+                "conclusion_auto": auto,
+                "samples": [{"code": x.id, "deck": x.deck, "location": x.location, "material": x.material, "part": x.part,
+                             "status": x.status, "restriction": x.restriction} for x in samples],
+                "certificates": list(dict.fromkeys(certs)), "results": results, "lab": lab,
+                "photos": [{"id": r["id"], "photo_no": r["photo_no"], "file": bool(r["stored_name"]),
+                            "description": r["description"] or ""} for r in linked],
+                "photo_files": len(with_file), "too_many_photos": len(with_file) > 4,
+            })
+        out.sort(key=lambda b: (order.get(b["group"], 99), b["no"]))
+        return out
+
+    def update_source(self, object_id, source_no: str, f: dict, by: str) -> None:
+        """Save fields of one bronblad (autosave). Condition must be one of conditions.json."""
+        from james.store import SOURCE_FIELDS
+        with self.lock:
+            oid = self.oid(object_id)
+            changes = {k: f[k] for k in SOURCE_FIELDS if k in f and k != "substance_group"}
+            if changes.get("condition") and changes["condition"] not in CONDITIONS:
+                raise ValueError("condition must be one of: " + ", ".join(CONDITIONS))
+            self.store.update_source(oid, (source_no or "").strip(), changes, by)
+
+    def new_source(self, object_id, group: str, samples: List[str], photo_ids: List[int], by: str) -> str:
+        """Create B<next> in a group and link the chosen samples and photos that have no source yet."""
+        with self.lock:
+            oid = self.oid(object_id)
+            if group not in GROUP_LABEL:
+                raise ValueError("unknown substance group")
+            reg = {x.id: x for x in self.store.register(oid)}
+            for code in samples:
+                if code not in reg:
+                    raise ValueError(f"unknown sample {code!r}")
+                if (reg[code].source or "").strip():
+                    raise ValueError(f"{code} already belongs to source {reg[code].source}")
+            for pid in photo_ids:
+                row = self.store.photo(int(pid))
+                if row is None or row["object_id"] != oid:
+                    raise ValueError("unknown photo in this project")
+                if row["sample_code"] or row["source_no"]:
+                    raise ValueError(f"photo {row['photo_no']} is already linked")
+            no = photos.next_number(self.store.sources(oid), first="B01")
+            self.store.create_source(oid, no, group, by)
+            for code in samples:
+                self.store.update_sample(oid, code, {"source": no}, by)
+            for pid in photo_ids:
+                self.update_photo(oid, int(pid), {"link": f"source:{no}"}, by)
+            return no
 
     # ---------- view for the screen ----------
     def view(self, rid: Optional[int] = None, object_id=None) -> dict:
@@ -677,12 +788,14 @@ class Service:
                                "proposal_reason": r["proposal_reason"] or ""} for r in self.store.photos(oid)],
                    "sources": sorted(sources),
                    "link_check": self.link_check(oid),
+                   "bronbladen": None,
                    "photo_max_mb": photos.max_photo_bytes() // (1024 * 1024),
-                   "conditions": CONDITIONS,
+                   "conditions": CONDITIONS, "assessments": list(ASSESSMENTS),
                    "reports": reports, "report": None, "open_lines": open_lines,
                    "groups": self.groups_view(reg),
                    "asset": self.store.asset(oid),
                    "thresholds_note": "Thresholds: to confirm by RVL (app/thresholds.json)."}
+            out["bronbladen"] = self.bronbladen(oid, out["link_check"])
             if not reports:
                 return out
             rid = rid if rid in [r["id"] for r in reports] else reports[-1]["id"]
@@ -975,8 +1088,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def send_view(self, rid, user: str, object_id=None) -> None:
+    def send_view(self, rid, user: str, object_id=None, extra: Optional[dict] = None) -> None:
         out = SERVICE.view(rid, object_id)
+        out.update(extra or {})
         out["me"] = user
         out["login"] = AUTH.enabled
         self.send_json(out)
@@ -1135,6 +1249,7 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch_post(self, path: str, body: dict, user: str) -> None:
         try:
             oid = body.get("object")                 # the project this browser tab shows (from its URL)
+            extra = None                             # extra answer fields, e.g. the number of a new source
             if path == "/api/reset":
                 SERVICE.reset()
                 rid, oid = None, SERVICE.demo_object
@@ -1191,12 +1306,19 @@ class Handler(BaseHTTPRequestHandler):
                 rid = int(body["report_id"])
                 SERVICE.set_certificate(rid, int(body["idx"]), body.get("certificate", ""), body.get("by", ""))
                 oid = SERVICE.report_object(rid)
+            elif path == "/api/source-update":
+                SERVICE.update_source(oid, body.get("source_no", ""), body, body.get("by", ""))
+                rid = body.get("report_id")
+            elif path == "/api/source-new":
+                extra = {"created": SERVICE.new_source(oid, body.get("group", ""), body.get("samples") or [],
+                                                       body.get("photos") or [], body.get("by", ""))}
+                rid = body.get("report_id")
             elif path == "/api/check-confirm":
                 SERVICE.confirm_check(oid, body.get("key", ""), body.get("by", ""))
                 rid = body.get("report_id")
             else:
                 return self.send_json({"error": "not found"}, 404)
-            self.send_view(rid, user, oid)
+            self.send_view(rid, user, oid, extra)
         except (ValueError, KeyError, TypeError, json.JSONDecodeError, binascii.Error) as e:
             self.send_json({"error": str(e)}, 400)
 

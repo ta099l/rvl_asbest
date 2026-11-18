@@ -114,15 +114,20 @@ NUMBERED = re.compile(r"^(.*?)(\d+)$")
 
 
 def next_photo_no(existing: Iterable[str]) -> str:
-    """The next photo number in the format the project already uses: F-013 after F-012, 8 after 7.
-    A project without numbers starts at 1."""
+    """The next photo number in the format the project already uses: F-013 after F-012, 8 after 7."""
+    return next_number(existing, first="1")
+
+
+def next_number(existing: Iterable[str], first: str = "1") -> str:
+    """The next number in the format a project already uses: F-013 after F-012, B11 after B10, 8 after 7.
+    One place for this rule, for photo numbers and source numbers. Nothing numbered yet: `first`."""
     best = None
     for no in existing:
         m = NUMBERED.match((no or "").strip())
         if m and (best is None or int(m.group(2)) > best[1]):
             best = (m.group(1), int(m.group(2)), m.group(2))
     if best is None:
-        return "1"
+        return first
     head, n, digits = best
     width = len(digits) if digits.startswith("0") and len(digits) > 1 else 1
     return head + str(n + 1).zfill(width)

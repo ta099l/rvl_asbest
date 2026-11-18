@@ -302,6 +302,26 @@
   details.fold > summary { padding: var(--s-4) var(--s-5); cursor: pointer; font-weight: 600; }
   details.fold[open] > summary { padding-bottom: var(--s-3); }
   .btn-link { font-size: var(--fs-sm); font-weight: 500; }
+  .bb-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: var(--s-5); align-items: start; margin-top: var(--s-5); }
+  .bb-list { position: sticky; top: 120px; max-height: calc(100vh - 140px); overflow-y: auto; }
+  .bb-group { padding: var(--s-2) var(--s-2) 0; }
+  .bb-group-h { font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); padding: var(--s-2) var(--s-2) var(--s-1); text-transform: uppercase; letter-spacing: .04em; }
+  .bb-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--s-2); width: 100%; text-align: left; border: 1px solid transparent;
+             background: transparent; padding: var(--s-2); border-radius: var(--r-sm); height: auto; margin-bottom: 2px; }
+  .bb-item .pill { grid-column: 2; justify-self: start; }
+  .bb-item-d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: var(--fs-sm); }
+  .bb-item.active { border-color: var(--brand); background: var(--brand-soft); }
+  .bb-head { align-items: center; }
+  .bb-head .spacer { flex: 1; }
+  .bb-record th { width: 34%; text-align: left; font-weight: 500; color: var(--text-2); vertical-align: top; }
+  .bb-record input, .bb-record select, .bb-record textarea { width: 100%; }
+  .bb-qty { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: var(--s-2); }
+  .bb-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-2); }
+  .bb-foto { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-2); align-items: center; font-size: var(--fs-sm); font-weight: 500; }
+  .bb-pending td { color: var(--text-2); }
+  .linkish { border: 0; background: none; padding: 0; height: auto; color: var(--brand); text-decoration: underline; cursor: pointer; font: inherit; }
+  label.check { display: flex; gap: var(--s-2); align-items: center; padding: 4px 0; font-size: var(--fs-sm); }
+  @media (max-width: 860px) { .bb-layout { grid-template-columns: minmax(0, 1fr); } .bb-list { position: static; max-height: none; } }
   .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-4); margin-top: var(--s-4); }
   .ph { margin: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); min-width: 0; }
   .ph img, .ph-missing { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-2); }
@@ -449,10 +469,12 @@ function parseRoute(hash) {
   if (p[0] !== "p" || !/^\d+$/.test(p[1] || "") || !PAGES.some(([id]) => id === p[2])) return null;
   if (p.length === 3) return { page: p[2], oid: +p[1], rid: null };
   if (p.length === 4 && WITH_REPORT.includes(p[2]) && /^\d+$/.test(p[3])) return { page: p[2], oid: +p[1], rid: +p[3] };
+  if (p.length === 4 && p[2] === "bronbladen") return { page: p[2], oid: +p[1], rid: null, src: decodeURIComponent(p[3]) };
   return null;
 }
-function href(page, oid = route.oid, rid = null) {
+function href(page, oid = route.oid, rid = null, src = null) {
   if (page === "projects" || !oid) return "#/projects";
+  if (page === "bronbladen" && src) return `#/p/${oid}/bronbladen/${encodeURIComponent(src)}`;
   return `#/p/${oid}/${page}` + (WITH_REPORT.includes(page) && rid ? "/" + rid : "");
 }
 function go(hash) { if (location.hash === hash) onRoute(); else location.hash = hash; }
@@ -796,24 +818,153 @@ function doFix(fix) {
   } else if (fix.page === "lab") pendingFix = `.prop[data-idx="${fix.line}"]`;
   go(href(fix.page, route.oid, fix.report || null));
 }
+// The Bronbladen page: left the sources per group, right the selected Source Record, edited in place.
+const BB_STATUS = { complete: ["Complete", "p-approved"], attention: ["Needs attention", "p-check"], not_accessible: ["Not accessible", "p-demo"] };
+const showAllPhotos = new Set();              // sources whose "+N more" photos are opened
+const savedAt = {};                           // per source: time of the last autosave
+let newSourceOpen = false;
+const currentSource = () => { const l = S.bronbladen || []; return l.find(b => b.no === route.src) || l[0]; };
+function goSource(no) {                       // in place: no new history entry, scroll stays put
+  route.src = no; newSourceOpen = false;
+  history.replaceState(null, "", href("bronbladen", route.oid, null, no));
+  update();
+}
+function stepSource(d) {
+  const l = S.bronbladen || [], b = currentSource(); if (!b) return;
+  const t = l[l.findIndex(x => x.no === b.no) + d]; if (t) goSource(t.no);
+}
+function issueList(issues, attr) {
+  return `<div class="issues">${issues.map((i, n) => `<div class="issue ${i.severity}">
+    <span class="pill ${i.severity === "error" ? "p-none" : "p-check"}">${i.severity === "error" ? "Fix" : "Check"}</span><span>${esc(i.text)}</span>
+    ${i.fix.confirm ? `<button data-confirm="${n}">Mark as checked</button>` : `<button class="primary" ${attr}="${n}">Fix</button>`}</div>`).join("")}</div>`;
+}
 function bronbladenPage() {
-  const head = pageHead("Bronbladen", "The link check: every broken link between photo, source, sample, lab result and certificate. Sign-off and the report use the same list.");
-  const issues = S.link_check;
-  if (!Array.isArray(issues)) return head + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="empty">The link check needs the James app.</div></div></section>`;
-  if (!issues.length) return head + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="callout ok"><b>All links complete.</b> Every photo, source, sample, lab result and certificate is linked.</div></div></section>`;
-  const errors = issues.filter(i => i.severity === "error").length;
-  return head + `<section class="panel">${panelHead("", "Link check", "", `<span class="small">${errors} to fix · ${issues.length - errors} to check</span>`)}
-    <div class="panel-body"><div class="issues">${issues.map((i, n) => `<div class="issue ${i.severity}">
-      <span class="pill ${i.severity === "error" ? "p-none" : "p-check"}">${i.severity === "error" ? "Fix" : "Check"}</span><span>${esc(i.text)}</span>
-      ${i.fix.confirm ? `<button data-confirm="${n}">Mark as checked</button>` : `<button class="primary" data-fix="${n}">Fix</button>`}</div>`).join("")}</div></div></section>`;
+  const head = pageHead("Bronbladen", "One Source Record per source, laid out as in the IHM report. Lab values come only from approved lab lines. Changes save by themselves.");
+  if (!Array.isArray(S.bronbladen)) return head + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="empty">The bronbladen need the James app.</div></div></section>`;
+  const issues = S.link_check || [], errors = issues.filter(i => i.severity === "error").length;
+  const check = `<details class="panel fold" id="linkcheck"><summary>Link check: ${issues.length
+      ? `${issues.length} issue${issues.length === 1 ? "" : "s"} <span class="small">· ${errors} to fix, ${issues.length - errors} to check</span>`
+      : `all links complete`}</summary><div class="panel-body">${issues.length ? issueList(issues, "data-fix")
+      : `<div class="callout ok"><b>All links complete.</b> Every photo, source, sample, lab result and certificate is linked.</div>`}</div></details>`;
+  const list = S.bronbladen, b = currentSource();
+  let groups = "", last = null;
+  for (const x of list) {
+    if (x.group !== last) { groups += `${last === null ? "" : "</div>"}<div class="bb-group"><div class="bb-group-h">${esc(x.group_label)}</div>`; last = x.group; }
+    const [label, cls] = BB_STATUS[x.status];
+    groups += `<button class="bb-item ${b && x.no === b.no ? "active" : ""}" data-src="${esc(x.no)}" ${b && x.no === b.no ? 'aria-current="true"' : ""}>
+      <span class="code">${esc(x.no)}</span><span class="bb-item-d">${esc(x.description || x.description_auto || "–")}</span><span class="pill ${cls}">${label}</span></button>`;
+  }
+  if (last !== null) groups += "</div>";
+  return head + check + `<div class="bb-layout">
+    <nav class="panel bb-list" aria-label="Sources">${groups || `<div class="empty">No sources yet.</div>`}
+      <div class="panel-foot"><button id="bb-new">New source</button></div></nav>
+    <section class="panel bb-sheet" id="bb-sheet">${newSourceOpen ? newSourceForm(b) : b ? bronblad(b) : `<div class="panel-body"><div class="empty">No sources yet. Register samples with a source number on Fieldwork, or create a new source.</div></div>`}</section>
+  </div>`;
+}
+function bronblad(b) {
+  const list = S.bronbladen, i = list.findIndex(x => x.no === b.no), [label, cls] = BB_STATUS[b.status];
+  const inp = (k, ph) => `<input class="bb-in" data-field="${k}" id="bb-${k}" value="${esc(b[k])}" placeholder="${esc(ph || "")}">`;
+  const area = (k, ph) => `<textarea class="bb-in" data-field="${k}" id="bb-${k}" rows="3" placeholder="${esc(ph || "")}">${esc(b[k])}</textarea>`;
+  const sel = (k, opts) => `<select class="bb-in" data-field="${k}" id="bb-${k}"><option value=""></option>${opts.map(o => `<option ${b[k] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  const row = (th, td) => `<tr><th scope="row">${th}</th><td>${td}</td></tr>`;
+  const none = (t) => `<span class="small muted">${t}</span>`;
+  const sampled = b.samples;
+  const lab = b.lab.map(l => l.state === "approved"
+    ? `<tr><td class="code">${esc(l.sample)}</td><td>${l.certificate ? esc(l.certificate) : '<span class="miss">missing</span>'}</td><td>${esc(l.method)}</td><td>${esc(l.result)}</td><td>${esc(l.remarks)}</td><td>${esc(l.quantity)}</td></tr>`
+    : `<tr class="bb-pending"><td class="code">${esc(l.sample)}</td><td colspan="5"><button class="linkish" data-labline="${l.idx}" data-report="${l.report}">${l.state === "waiting"
+        ? "Waiting for approval" : "Link rejected – choose the right sample on Lab results"}</button> <span class="small muted">· line ${l.line} of ${esc(l.report_label)}</span></td></tr>`).join("");
+  const shown = showAllPhotos.has(b.no) ? b.photos : b.photos.slice(0, 4), more = b.photos.length - shown.length;
+  const photosHtml = b.photos.length ? `<div class="bb-photos">${shown.map(p => `<figure class="ph">
+      ${p.file ? `<img src="/api/photo/${p.id}/thumb?object=${route.oid}" alt="Foto ${esc(p.photo_no)}${p.description ? ": " + esc(p.description) : ""}" loading="lazy">`
+               : `<div class="ph-missing">Photo missing<span class="small">no file yet</span></div>`}
+      <figcaption><label class="bb-foto">Foto ${esc(p.photo_no)} |<input class="bb-photo-desc" data-id="${p.id}" value="${esc(p.description)}" placeholder="Description"></label></figcaption></figure>`).join("")}</div>
+    ${more > 0 || showAllPhotos.has(b.no) && b.photos.length > 4 ? `<button class="ghost" id="bb-more">${more > 0 ? `+${more} more: show all ${b.photos.length} photos` : "Show the first 4 only"}</button>` : ""}
+    ${b.too_many_photos ? `<div class="callout warn" style="margin-top:8px">A bronblad holds at most 4 photos; this source has ${b.photo_files}. Unlink the extra ones on <button class="linkish" id="bb-photos-fix">Fieldwork</button>.</div>` : ""}`
+    : none("No photos linked to this source yet.");
+  return `<div class="panel-head bb-head"><div><div class="eyebrow">${esc(b.group_label)} · ${i + 1} of ${list.length}</div><h2>Source ${esc(b.no)}</h2></div>
+      <span class="pill ${cls}">${label}</span><span class="small bb-saved" role="status" aria-live="polite">${savedAt[b.no] ? "Saved ✓ " + savedAt[b.no] : ""}</span>
+      <span class="spacer"></span>
+      <div class="actions"><button id="bb-prev" ${i <= 0 ? "disabled" : ""}>← Previous</button><button id="bb-next" class="primary" ${i >= list.length - 1 ? "disabled" : ""}>Next →</button></div></div>
+    <div class="panel-body">
+      ${b.issues.length ? issueList(b.issues, "data-bbfix") : ""}
+      <div class="table-frame tscroll" style="margin-top:12px"><table class="bb-record"><tbody>
+        ${row("Source Description", inp("description", b.description_auto))}
+        ${row("Sample Number(s)", sampled.length ? sampled.map(x => `<span class="code">${esc(x.code)}</span>${x.status === "not sampled" ? ` <span class="pill p-demo">not sampled</span> <span class="small">${esc(x.restriction)}</span>` : ""}`).join("<br>")
+              + ` <button class="linkish" id="bb-edit-samples">edit on Fieldwork</button>` : none("No samples in this source."))}
+        ${row("Laboratory Certificate", b.certificates.length ? b.certificates.map(esc).join(", ") : none("no approved certificate yet"))}
+        ${row("Location", sampled.map(x => esc([x.deck, x.location].filter(Boolean).join(" › "))).filter(Boolean).join("<br>") || none("–"))}
+        ${row("Material / Application", sampled.map(x => esc([x.material, x.part].filter(Boolean).join(" / "))).filter(Boolean).join("<br>") || none("–"))}
+        ${row("Condition", sel("condition", S.conditions || []))}
+        ${row("Analysis Results", b.results.length ? b.results.map(esc).join("<br>") : none("no approved result yet"))}
+        ${row("Quantity", `<span class="bb-qty">${inp("quantity", "12")}${sel("unit", ["kg", "m2", "m", "pcs", "l"])}</span>`)}
+        ${row("Conclusions and/or Recommendations", area("conclusion", b.conclusion_auto ? "Proposed from the approved results: " + b.conclusion_auto : ""))}
+        ${row("Assessment", sel("assessment", S.assessments || []))}
+        ${row("Drawing position", inp("drawing", "GA-02 pos 4"))}
+      </tbody></table></div>
+      <h3>Laboratory Analysis Results</h3>
+      ${b.lab.length ? `<div class="table-frame tscroll"><table><thead><tr><th>Sample Number</th><th>Certificate Number</th><th>Analysis Method</th><th>Analysis Result</th><th>Remarks</th><th>Quantity (±)</th></tr></thead><tbody>${lab}</tbody></table></div>` : none("No lab line for this source yet.")}
+      <h3>Photos</h3>
+      ${photosHtml}
+    </div>`;
+}
+function newSourceForm(b) {
+  const free = S.register.filter(x => !(x.source || "").trim()), photosFree = (S.photos || []).filter(p => !p.sample && !p.source);
+  const group = b ? b.group : "asbestos";
+  return `${panelHead("New source", "New source", "James gives it the next number. Pick the samples and photos that belong to it; only ones without a source are listed.")}
+    <div class="panel-body">
+      <label class="field">Substance group<select id="ns-group">${S.groups.map(g => `<option value="${g.key}" ${g.key === group ? "selected" : ""}>${esc(g.label)}</option>`).join("")}</select></label>
+      <h3>Samples without a source</h3>
+      ${free.length ? free.map(x => `<label class="check"><input type="checkbox" class="ns-sample" value="${esc(x.code)}"> <span class="code">${esc(x.code)}</span> ${esc(x.material)} · ${esc(x.location)}</label>`).join("") : `<div class="small muted">None.</div>`}
+      <h3>Photos without a link</h3>
+      ${photosFree.length ? photosFree.map(p => `<label class="check"><input type="checkbox" class="ns-photo" value="${p.id}"> Foto ${esc(p.photo_no)} <span class="small muted">${esc(p.original_name)}</span></label>`).join("") : `<div class="small muted">None.</div>`}
+      <div class="actions" style="margin-top:16px"><button class="primary" id="ns-create">Create source</button><button class="ghost" id="ns-cancel">Cancel</button></div>
+    </div>`;
 }
 function wireBronbladen() {
-  document.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => doFix(S.link_check[Number(b.dataset.fix)].fix));
-  document.querySelectorAll("[data-confirm]").forEach(b => b.onclick = () => {
+  const b = currentSource();
+  document.querySelectorAll("[data-fix]").forEach(x => x.onclick = () => doFix(S.link_check[Number(x.dataset.fix)].fix));
+  document.querySelectorAll("[data-bbfix]").forEach(x => x.onclick = () => doFix(b.issues[Number(x.dataset.bbfix)].fix));
+  document.querySelectorAll("[data-confirm]").forEach(x => x.onclick = () => {
     if (needName()) return;
-    post("/api/check-confirm", { key: S.link_check[Number(b.dataset.confirm)].key, by: inspector }).catch(() => {});
+    const list = x.closest(".bb-sheet") ? b.issues : S.link_check;
+    post("/api/check-confirm", { key: list[Number(x.dataset.confirm)].key, by: inspector }).catch(() => {});
   });
+  document.querySelectorAll("[data-src]").forEach(x => x.onclick = () => goSource(x.dataset.src));
+  const prev = $("#bb-prev"); if (prev) prev.onclick = () => stepSource(-1);
+  const next = $("#bb-next"); if (next) next.onclick = () => stepSource(1);
+  const saved = (no) => () => { savedAt[no] = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); };
+  document.querySelectorAll(".bb-in").forEach(el => el.onchange = () => {          // autosave, field by field
+    if (needName()) return;
+    post("/api/source-update", { source_no: b.no, [el.dataset.field]: el.value, by: inspector }, { onOk: saved(b.no) }).catch(() => {});
+  });
+  document.querySelectorAll(".bb-photo-desc").forEach(el => el.onchange = () => {
+    if (needName()) return;
+    post("/api/photo-update", { id: Number(el.dataset.id), description: el.value, by: inspector }, { onOk: saved(b.no) }).catch(() => {});
+  });
+  document.querySelectorAll("[data-labline]").forEach(x => x.onclick = () => doFix({ page: "lab", report: Number(x.dataset.report), line: Number(x.dataset.labline) }));
+  const more = $("#bb-more"); if (more) more.onclick = () => { showAllPhotos.has(b.no) ? showAllPhotos.delete(b.no) : showAllPhotos.add(b.no); update(); };
+  const pf = $("#bb-photos-fix"); if (pf) pf.onclick = () => doFix({ page: "fieldwork", photos: true, group: b.group });
+  const es = $("#bb-edit-samples"); if (es) es.onclick = () => doFix({ page: "fieldwork", group: b.group, sample: b.samples[0].code });
+  const nw = $("#bb-new"); if (nw) nw.onclick = () => { newSourceOpen = true; update(); };
+  const nc = $("#ns-cancel"); if (nc) nc.onclick = () => { newSourceOpen = false; update(); };
+  const cr = $("#ns-create"); if (cr) cr.onclick = () => {
+    if (needName()) return;
+    const samples = [...document.querySelectorAll(".ns-sample:checked")].map(x => x.value);
+    const photos = [...document.querySelectorAll(".ns-photo:checked")].map(x => Number(x.value));
+    post("/api/source-new", { group: $("#ns-group").value, samples, photos, by: inspector }, { onOk: d => {
+      newSourceOpen = false; route.src = d.created;
+      history.replaceState(null, "", href("bronbladen", route.oid, null, d.created));
+      toast(`Source ${d.created} created.`);
+    } }).catch(() => {});
+  };
 }
+// ← and → move through the bronbladen, except while typing in a field.
+document.addEventListener("keydown", e => {
+  if (route.page !== "bronbladen" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.target.closest && e.target.closest("input, textarea, select") || document.querySelector("dialog[open]")) return;
+  if (e.key === "ArrowRight") stepSource(1); else if (e.key === "ArrowLeft") stepSource(-1); else return;
+  e.preventDefault();
+});
 function wireFieldwork() {
   wirePhotos();
   document.querySelectorAll("[data-fw-tab]").forEach(b => b.onclick = () => {
