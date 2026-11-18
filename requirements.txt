@@ -1,0 +1,4 @@
+# What the James app needs to run (pinned: the versions it was tested with on 19 Nov 2026).
+pdfplumber==0.11.10
+pillow==12.3.0
+jsonschema==4.26.0

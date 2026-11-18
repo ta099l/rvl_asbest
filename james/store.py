@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import re
 from typing import Callable, Dict, List, Optional
 
+from ai.james_ai.linker import alias_key
 from .linker import Sample, link
 
 SCHEMA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema.sql")
@@ -22,15 +23,18 @@ _NEW_COLUMNS = {
     "lab_row": [("certificate", "TEXT"), ("method", "TEXT"), ("quantity", "TEXT"), ("remarks", "TEXT"),
                 ("ai_code", "TEXT"), ("ai_confidence", "TEXT"), ("ai_reason", "TEXT"), ("ai_source", "TEXT"),
                 ("ai_prompt_version", "TEXT"), ("ai_sent", "INTEGER")],
+    "photo": [("proposed_sample", "TEXT"), ("proposed_source", "TEXT"), ("proposal_reason", "TEXT")],
 }
 # Tables added after the first version; on an old file they are created and filled once (see _upgrade).
 _NEW_TABLES = ("source", "photo")
 # What an inspector may change on a source (bronblad). The source number itself never changes.
 SOURCE_FIELDS = ("substance_group", "description", "condition", "quantity", "unit", "assessment", "conclusion", "drawing")
 ASSESSMENTS = ("confirmed", "not hazardous", "PCHM", "not accessible")
-# register_log actions about sources and photos start with these words. They do not change what the
-# linker reads, so they never mark lab proposals out of date (register_changed_at skips them).
-SOURCE_PHOTO_ACTIONS = ("source ", "photo ")
+# register_log actions about sources, photos, link-check confirmations and certificates typed in by the
+# inspector start with these words. They do not change what the linker reads, so they never mark lab
+# proposals out of date (register_changed_at skips them), and they do not show in the Fieldwork log.
+SOURCE_PHOTO_ACTIONS = ("source ", "photo ", "check ", "lab ")
+PHOTO_EDITABLE = ("photo_no", "description", "sample_code", "source_no")
 # Fields an inspector may change after registering a sample. The code itself never changes:
 # lab results and decisions hang on it.
 EDITABLE = ("source", "location", "part", "material", "notes", "photo", "deck", "status", "restriction", "drawing",
@@ -71,7 +75,8 @@ class Store:
     def __init__(self, path: str = ":memory:", group_of: Optional[Callable[[str], Optional[str]]] = None):
         """group_of: sample code -> substance group (the app passes app.ihm.group_for_code); None leaves it empty."""
         self.group_of = group_of or (lambda code: None)
-        self.db = sqlite3.connect(path)
+        # One connection shared by the server's threads; the server holds one lock around every Store call.
+        self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         exists = self.db.execute(
@@ -85,6 +90,10 @@ class Store:
     def _upgrade(self) -> None:
         """Bring a database file from an older schema up to date, without losing data."""
         with self.db:
+            tables = {r["name"] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            missing = [t for t in _NEW_TABLES if t not in tables]
+            for t in missing:                               # the same CREATE TABLE as schema.sql, no copy
+                self.db.execute(_schema_table(t))
             for table, cols in _NEW_COLUMNS.items():
                 have = {r["name"] for r in self.db.execute(f"PRAGMA table_info({table})")}
                 for name, typ in cols:
@@ -97,10 +106,6 @@ class Store:
             self.db.execute("CREATE TABLE IF NOT EXISTS signoff (id INTEGER PRIMARY KEY, "
                             "report_id INTEGER NOT NULL REFERENCES lab_report(id), signed_by TEXT NOT NULL, "
                             "signed_at TEXT NOT NULL, open_items TEXT NOT NULL)")
-            have = {r["name"] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            missing = [t for t in _NEW_TABLES if t not in have]
-            for t in missing:                               # the same CREATE TABLE as schema.sql, no copy
-                self.db.execute(_schema_table(t))
         if "source" in missing:
             # Filled ONCE, when the tables are new: running the upgrade again changes nothing, and a photo
             # an inspector unlinked later is never recreated from the old text field. Nothing is deleted.
@@ -188,6 +193,9 @@ class Store:
         check_sample(s)
         if s.id in {x.id for x in self.register(object_id)}:
             raise ValueError(f"sample code {s.id} is already registered for this object; codes must be unique")
+        same = next((x.id for x in self.register(object_id) if alias_key(x.id) and alias_key(x.id) == alias_key(s.id)), None)
+        if same:
+            raise ValueError(f"{s.id} is the same sample as {same} in another notation; use {same}")
         with self.db:
             self.db.execute(
                 "INSERT INTO sample(object_id,code,source,location,part,material,notes,photo,deck,status,"
@@ -266,6 +274,98 @@ class Store:
     def photos(self, object_id: int) -> List[sqlite3.Row]:
         return self.db.execute("SELECT * FROM photo WHERE object_id=? ORDER BY sort_order, id", (object_id,)).fetchall()
 
+    def photo(self, photo_id: int) -> Optional[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM photo WHERE id=?", (photo_id,)).fetchone()
+
+    def photo_by_sha(self, object_id: int, sha: str) -> Optional[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM photo WHERE object_id=? AND sha256=?", (object_id, sha)).fetchone()
+
+    def add_photo_file(self, object_id: int, f: Dict[str, object], by: str, fill_id: Optional[int] = None) -> int:
+        """Record an uploaded file. fill_id: an existing photo row without a file (same photo number) that
+        gets this file, so no duplicate row is made. Otherwise a new row with f['photo_no']."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        cols = ("stored_name", "original_name", "sha256", "mime", "width", "height")
+        with self.db:
+            if fill_id is not None:
+                self.db.execute("UPDATE photo SET " + ", ".join(f"{c}=?" for c in cols) + ", uploaded_by=?, uploaded_at=? "
+                                "WHERE id=? AND object_id=? AND stored_name IS NULL",
+                                [f[c] for c in cols] + [by.strip(), _now(), fill_id, object_id])
+                no = self.photo(fill_id)["photo_no"]
+                self._log_register(object_id, no, "photo file added", f"{f['original_name']} (matched by photo number)", by)
+                return fill_id
+            n = self.db.execute("SELECT COALESCE(MAX(sort_order), 0) FROM photo WHERE object_id=?", (object_id,)).fetchone()[0]
+            cur = self.db.execute(
+                "INSERT INTO photo(object_id,photo_no," + ",".join(cols) + ",proposed_sample,proposed_source,proposal_reason,"
+                "sort_order,uploaded_by,uploaded_at) VALUES (" + ",".join("?" * (len(cols) + 8)) + ")",
+                [object_id, f["photo_no"], *[f[c] for c in cols], f.get("proposed_sample"), f.get("proposed_source"),
+                 f.get("proposal_reason"), n + 1, by.strip(), _now()])
+            self._log_register(object_id, f["photo_no"], "photo added",
+                               f"{f['original_name']}; proposed: {f.get('proposed_sample') or f.get('proposed_source') or 'no link'}", by)
+            return cur.lastrowid
+
+    def update_photo(self, object_id: int, photo_id: int, changes: Dict[str, Optional[str]], by: str) -> None:
+        """Change number, description or link of a photo. Logged old -> new; an unlink keeps the row."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        row = self.photo(photo_id)
+        if row is None or row["object_id"] != object_id:
+            raise ValueError("unknown photo in this project")
+        bad = set(changes) - set(PHOTO_EDITABLE)
+        if bad:
+            raise ValueError("these fields cannot be changed: " + ", ".join(sorted(bad)))
+        new = {k: (v or "").strip() or None for k, v in changes.items()}
+        if "photo_no" in new:
+            if not new["photo_no"]:
+                raise ValueError("a photo needs a number")
+            clash = self.db.execute("SELECT 1 FROM photo WHERE object_id=? AND photo_no=? AND id<>?",
+                                    (object_id, new["photo_no"], photo_id)).fetchone()
+            if clash:
+                raise ValueError(f"photo number {new['photo_no']} is already used in this project")
+        if new.get("sample_code") and new["sample_code"] not in {s.id for s in self.register(object_id)}:
+            raise ValueError(f"unknown sample {new['sample_code']!r}")
+        if new.get("source_no") and new["source_no"] not in self.sources(object_id):
+            raise ValueError(f"unknown source {new['source_no']!r}")
+        diffs = [f"{k}: {row[k] or '–'} -> {v or '–'}" for k, v in new.items() if (row[k] or None) != v]
+        if not diffs:
+            return
+        linked = {"sample_code", "source_no"} & set(new)
+        action = ("photo unlinked" if linked and not (new.get("sample_code") or new.get("source_no"))
+                  else "photo linked" if linked else "photo changed")
+        with self.db:
+            self.db.execute("UPDATE photo SET " + ", ".join(f"{k}=?" for k in new) + " WHERE id=?", [*new.values(), photo_id])
+            self._log_register(object_id, new.get("photo_no") or row["photo_no"], action, "; ".join(diffs), by)
+
+    def set_certificate(self, report_id: int, idx: int, certificate: str, by: str) -> None:
+        """The inspector types the certificate number of a lab line that has none (read from the certificate
+        itself). Only an EMPTY number is filled: what the lab wrote is never overwritten. Logged."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        cert = (certificate or "").strip()
+        if not cert:
+            raise ValueError("enter the certificate number")
+        row = self.db.execute("SELECT r.*, l.object_id FROM lab_row r JOIN lab_report l ON l.id = r.report_id "
+                              "WHERE r.report_id=? AND r.idx=?", (report_id, idx)).fetchone()
+        if row is None:
+            raise ValueError(f"no lab row {idx} in report {report_id}")
+        if (row["certificate"] or "").strip():
+            raise ValueError("this lab line already has a certificate number from the lab; it is not changed")
+        with self.db:
+            self.db.execute("UPDATE lab_row SET certificate=? WHERE id=?", (cert, row["id"]))
+            self._log_register(row["object_id"], row["raw_id"] or f"line {idx + 1}", "lab certificate added",
+                               f"report {report_id}, line {idx + 1}: {cert} (typed by the inspector)", by)
+
+    def confirm_check(self, object_id: int, key: str, text: str, by: str) -> None:
+        """The inspector checked a link-check warning (e.g. MM-12 and HM-12 are really two samples). Logged."""
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        with self.db:
+            self._log_register(object_id, key, "check confirmed", text, by)
+
+    def confirmed_checks(self, object_id: int) -> set:
+        return {r["code"] for r in self.db.execute(
+            "SELECT code FROM register_log WHERE object_id=? AND action='check confirmed'", (object_id,))}
+
     def update_source(self, object_id: int, source_no: str, changes: Dict[str, str], by: str) -> None:
         """Change the details of a source (bronblad). Logged old -> new; the source number never changes."""
         if not (by or "").strip():
@@ -300,9 +400,9 @@ class Store:
         return self.db.execute("SELECT * FROM register_log WHERE object_id=? ORDER BY id", (object_id,)).fetchall()
 
     def register_changed_at(self, object_id: int) -> Optional[str]:
-        r = self.db.execute("SELECT MAX(changed_at) m FROM register_log WHERE object_id=? AND code<>? "
-                            "AND action NOT LIKE 'source %' AND action NOT LIKE 'photo %'",
-                            (object_id, PROJECT_LOG_CODE)).fetchone()
+        skip = " ".join("AND action NOT LIKE ?" for _ in SOURCE_PHOTO_ACTIONS)
+        r = self.db.execute(f"SELECT MAX(changed_at) m FROM register_log WHERE object_id=? AND code<>? {skip}",
+                            (object_id, PROJECT_LOG_CODE, *[a + "%" for a in SOURCE_PHOTO_ACTIONS])).fetchone()
         return r["m"]
 
     def sampled(self, object_id: int) -> List[Sample]:

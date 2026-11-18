@@ -8,3 +8,7 @@ __pycache__/
 
 # Background documents for Claude, may hold client data: never commit
 context/
+
+# Uploaded photos (JAMES_DATA_DIR; by default next to the database file). Never in git.
+/data/
+/photos/

@@ -69,3 +69,26 @@ Type a name in the **Inspector** field at the top before you approve, register o
 - [ ] Open your own `james.db` with the new version (make a copy first) and click through every page.
 - [ ] Restart the app with `JAMES_AI_PROVIDER=groq`: a report read before the restart shows its proposals without a new "Groq usage" line in the console.
 - [ ] Export a report and check the Condition line under each Source Record in Word or LibreOffice.
+
+## Photos and the link check (19 Nov 2026)
+
+**Checked by script (19 Nov 2026):** local headless Chrome, demo ship, 19 fictional images made in the page with the same names as `app/demo/make_demo_photos.py`. 13 of 13 checks passed.
+
+- [x] The register form has no Photo field; the Photos panel shows the 8 known photo numbers as "Photo missing".
+- [x] 19 photos upload one at a time with "Uploading 7 of 19"; the summary says "19 photos uploaded, 17 with a proposed link".
+- [x] Thumbnails load (with the tab in front: the first check ran in a background tab, where Chrome does not load lazy images).
+- [x] "Accept all proposals (9)" links 9 photos and fills their descriptions; 2 stay unlinked (an overview and the typo MI02).
+- [x] A text file renamed to notes.jpg is refused with "please export it as JPG".
+- [x] Bronbladen lists the issues (B01 with 5 photos, MI02 not linked, MM-9 not in the register, MM-1 and HM-1 differ only by prefix, ...).
+- [x] Fix on "MI02 not linked" opens Fieldwork at that photo; linking it with the dropdown removes the issue.
+- [x] "Mark as checked" removes the MM-1/HM-1 warning.
+- [x] After approving HM-1, Fix on "no certificate number" opens that lab line; typing C-4471-07 removes the issue.
+- [x] No horizontal scroll at 768 px; no script errors.
+
+**Covered by unit tests, not in the browser:** 40 MB refused before reading, a duplicate skipped, a stalled upload not blocking another window, the photo route refusing another project and a missing login.
+
+**Still for a person:**
+- [ ] Use the real file picker: run `.venv/bin/python app/demo/make_demo_photos.py`, then on Fieldwork click **Upload photos** and pick all files in `data/demo_photos`.
+- [ ] Upload a real (fictional) phone photo with GPS, download it with right-click → Open image in new tab, and check no location data is left (for example in Windows Properties → Details).
+- [ ] Upload a 15 MB photo in one window and click around in another window meanwhile.
+- [ ] Try an iPhone HEIC photo: expect "please export it as JPG".

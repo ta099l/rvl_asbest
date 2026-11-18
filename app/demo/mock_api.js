@@ -221,6 +221,8 @@
       objects: st.objects.map(x => ({ id: x.id, name: x.name, project: x.project })),
       groups: groupsView(o),
       conditions: CONDITIONS,
+      photos: [], sources: [...new Set(o.register.map(s => s.source).filter(Boolean))].sort(), photo_max_mb: 15,
+      link_check: null,                       // the link check runs in the Python app only
       register: o.register.map(s => ({ ...s, group: groupForCode(s.code), condition: ((o.sources || {})[s.source] || ""), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
       register_log: o.log, reports: reports.map(x => ({ id: x.id, label: x.label, report_ref: x.ref, lab: x.lab, ingested_at: x.ingested_at, practice: !!x.seeded })),
       report: r ? reportView(r) : null, asset: assetView(o), thresholds_note: "Thresholds: to confirm by RVL (app/thresholds.json)." };
@@ -332,6 +334,8 @@
     "/api/demo": b => loadDemo(b.which || "b1"),
     "/api/practice": () => loadDemo("b1", true),
     "/api/report": () => fail(APP_ONLY), "/api/upload-pdf": () => fail(APP_ONLY),
+    "/api/photo": () => fail(APP_ONLY), "/api/photo-update": () => fail(APP_ONLY), "/api/photo-accept": () => fail(APP_ONLY),
+    "/api/certificate": () => fail(APP_ONLY), "/api/check-confirm": () => fail(APP_ONLY),
     "/api/reread": b => { const r = report(b.report_id); if (r.signed) fail("this report is signed; its proposals can no longer change");
                           r.readRev = st.objects.find(o => o.id === r.object).regRev;
                           r.agent.push({ at: now(), by: "Agent", text: "Read again with the current field registration (in this demo page the proposals stay the same; the app runs the linker again)." }); return r.id; },
@@ -354,7 +358,7 @@
       if (path === "/api/export") return reply(400, { error: APP_ONLY });
       const route = ROUTES[path];
       if (!route) return reply(404, { error: "not found" });
-      const body = opt && opt.body ? JSON.parse(opt.body) : {};
+      const body = opt && typeof opt.body === "string" ? JSON.parse(opt.body) : {};   // a photo upload sends the file itself
       if (path !== "/api/project" && path !== "/api/reset") useObject(body.object);
       if (body.report_id && ["/api/decide", "/api/sign", "/api/save-history", "/api/reread"].includes(path)) st.current = report(body.report_id).object;
       const rid = route(body);

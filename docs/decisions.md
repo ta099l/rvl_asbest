@@ -296,3 +296,65 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **Demo page:** `app/demo/mock_api.js` accepts a condition per source. Its built-in demo has no conditions until `app/demo/build_artifact.py` is run again.
 - **Tests:** new `tests/test_sources.py` (11); `app/test_app.py` +5 (saved proposals, condition); `app/test_export.py` +1 (Condition only).
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-19: Photo upload, numbering, proposed links and the link check (made at Tasnim's request, for Ivan to review)
+
+- **Why:** Rolf: "Photos must get a number and description and correspond to the right sample and analysis certificate. The user must be able to check and correct that."
+- **Server** (`app/server.py`):
+  - `ThreadingHTTPServer`: one slow upload no longer blocks other windows.
+  - SQLite keeps **one shared connection** (`check_same_thread=False`), with **one lock** (`Service.lock`) around every database call. Reading an upload and resizing a photo happen outside the lock.
+  - Not one connection per request, because an in-memory database would be empty on every new connection, and the proposals cache lives in `Service`.
+- **Limits:** every POST is refused **before the body is read** when `Content-Length` is missing (411) or too large (413).
+  - JSON: 25 MB.
+  - Photo: `JAMES_MAX_PHOTO_MB`, default 15.
+  - The PDF limit went from 20 to **18 MB**, because a PDF travels as base64 inside JSON (+33%).
+- **Storage** (`app/photos.py`):
+  - Files go under `JAMES_DATA_DIR` (default: the folder of the database file; `./data` when the database is in memory), in `photos/<object>/<sha256>.jpg` with `thumbs/`.
+  - Never under `app/static`. The name is generated from the sha256, never taken from the user. `/data/` and `/photos/` are in `.gitignore`.
+- **Upload:** `POST /api/photo?object=&name=` with the raw image as body (no base64).
+  - Magic bytes (JPEG, PNG) are checked first. HEIC and other types get "please export it as JPG".
+  - The image is opened with Pillow, turned upright from EXIF orientation, and saved as a **new JPEG** with a 400 px thumbnail.
+  - **Re-encoding removes all EXIF data, including the GPS position phones store in photos.**
+  - Very large pixel counts ("decompression bombs") are refused.
+  - The same file twice in one project (same sha256) is skipped with a message.
+  - The browser sends files one at a time, with "7 of 20" progress.
+- **Serving:** `GET /api/photo/<id>[/thumb]?object=` needs a login when login is on. The photo's project is looked up in the database and must equal the `object` in the request; otherwise 404.
+- **Numbering:** new numbers continue the project's own format, in one function (`photos.next_photo_no`): F-013 after F-012, or 1, 2, 3 for a project without numbers.
+  - An upload whose file name carries the number of a row without a file (e.g. "MM-1 F-012 pipe.jpg") fills that row, so there are no duplicates (the P3 promise).
+  - Numbers are editable and stay unique per project.
+- **Proposed link:** rules only, no AI. A sample code (`M01`, `PBS-03`, `hm12_2`) or source code (`B4`) in the file name, read with the linker's own `alias_key` (the same code reader as P2).
+  - Two different samples in one name: no proposal, and the reason says so.
+  - Proposals are stored separately (`photo.proposed_sample`, `proposed_source`, `proposal_reason`). "Accept all proposals" applies them in one click.
+  - Linking fills an empty description with "<location> - <material, part>".
+- **`sample.photo` retired** (as planned in P3): the Photo text field left the register form. Photo columns, checks, the chain and the export use photos with a file from the `photo` table. The database column stays (no migration).
+- **Link check** (`Service.link_check`, in the view JSON as `link_check`): one list for the Bronbladen page, the sign-off open items and the export. Every line has a Fix target that opens the exact place.
+
+  | Rule | Kind |
+  |---|---|
+  | Photo not linked | error |
+  | Source without photo | error |
+  | Source with more than 4 photos | error |
+  | Sample without source | error |
+  | Sample without approved lab result | error |
+  | Approved result without certificate number | error |
+  | Lab line code not in the register | error |
+  | Same sample twice (M-3 and MM-3) | error |
+  | Codes that differ by one prefix letter with the same number (MM-12/HM-12, OS-1/ODS-1) | warning |
+
+  - The prefix warning can be **marked as checked** (logged with name and time), because codes never change. It only fires for prefixes one letter apart, since RVL numbers every prefix from 1.
+  - **Added to make two fixes possible:**
+    - A certificate number can be typed on a lab line that has **none** (logged; the lab's own number is never overwritten).
+    - Registering `M-3` next to `MM-3` is now refused.
+  - An existing M-3/MM-3 pair from older data can only be resolved with a merge or delete, which is parked.
+  - All "photo", "check" and "lab certificate" log lines are kept out of the Fieldwork log and never mark lab proposals out of date.
+- **Other:**
+  - `requirements.txt` (pdfplumber, pillow, jsonschema, pinned) and `requirements-dev.txt` (+ reportlab for tests). `start_james.bat` installs from `requirements.txt` and carries on when offline.
+  - New `app/demo/make_demo_photos.py` makes 19 fictional images; 17 link automatically. They include one sideways image with an EXIF rotate tag, one PNG and the typo MI02.
+  - `mock_api.js` answers the photo routes with "needs the app".
+  - The Upload placeholder now points to Fieldwork for photos.
+- **Hosting:** the repo still describes Render (`docs/hosting.md`); Scaleway (H1) is not in the repo yet. Set `JAMES_DATA_DIR` on the data volume there.
+- **Tests:** new `app/test_photos.py` (23) and `app/test_linkcheck.py` (11).
+  - The photo tests include: 40 MB refused before reading, a missing Content-Length, a stalled upload not blocking another window, and the serve route refusing a wrong project and a missing login.
+  - The link-check tests produce every rule and check it disappears after its fix.
+  - Browser checks in local headless Chrome, demo data only: 13 of 13.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

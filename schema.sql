@@ -157,6 +157,9 @@ CREATE TABLE photo (
     description TEXT,
     source_no   TEXT,
     sample_code TEXT,                   -- NULL = not linked to a sample (unlinked rows are kept)
+    proposed_sample TEXT,               -- the link James proposes from the file name (rules only, no AI);
+    proposed_source TEXT,               --   the inspector accepts it or chooses another
+    proposal_reason TEXT,
     sort_order  INTEGER,
     uploaded_by TEXT,
     uploaded_at TEXT,

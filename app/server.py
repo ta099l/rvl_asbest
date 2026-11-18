@@ -29,7 +29,8 @@ import sys
 import tempfile
 import threading
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, unquote, urlsplit
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -39,7 +40,7 @@ if str(ROOT) not in sys.path:
 
 from ai.james_ai.ai_step import ReplayClient            # noqa: E402
 from ai.james_ai.contract import ContractError          # noqa: E402
-from app import export_odt                              # noqa: E402
+from app import export_odt, photos                      # noqa: E402
 from app.auth import COOKIE, LOGIN_PAGE, SESSION_SECONDS, Auth, parse_users  # noqa: E402
 from app.demo_data import SHIP                          # noqa: E402
 from app.ihm import (GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_for_code,  # noqa: E402
@@ -47,13 +48,15 @@ from app.ihm import (GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_
                      sum_quantities, table_line)
 from ai.james_ai.hybrid import HybridRun, hybrid        # noqa: E402
 from ai.james_ai.linker import Sample                   # noqa: E402
-from james.store import EDITABLE, OBJECT_FIELDS, PROJECT_INFO, Store   # noqa: E402
+from james.store import EDITABLE, OBJECT_FIELDS, PROJECT_INFO, SOURCE_PHOTO_ACTIONS, Store   # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 # The condition values of a source, in one place (to confirm with Rolf).
 CONDITIONS = json.loads((Path(__file__).resolve().parent / "conditions.json").read_text(encoding="utf-8"))["values"]
 DEMO_REPLAY = ROOT / "ai" / "replays" / "demo_ship.json"
 PRACTICE_ERRORS = 5          # wrong links seeded into a practice report (test case TC12)
+MAX_JSON_BYTES = 25 * 1024 * 1024     # every JSON request; refused BEFORE the body is read
+MAX_PDF_BYTES = 18 * 1024 * 1024      # a PDF travels as base64 inside JSON (+33%), so 18 MB fits in 25 MB
 
 
 def _fingerprint(*paths: Path) -> str:
@@ -65,6 +68,16 @@ def _fingerprint(*paths: Path) -> str:
 
 # Which linking code made a proposal: changes whenever the linker or the hybrid pipeline changes.
 LINKER_VERSION = _fingerprint(ROOT / "ai" / "james_ai" / "linker.py", ROOT / "ai" / "james_ai" / "hybrid.py")
+
+
+def _one_letter_apart(a: str, b: str) -> bool:
+    """True when two prefixes differ by exactly one letter added, removed or changed (MM/HM, OS/ODS)."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    short, long_ = sorted((a, b), key=len)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
 def now() -> str:
@@ -83,9 +96,13 @@ def minutes_between(a: str, b: str) -> float:
 class Service:
     """All state of one demo session. One lock: the demo has one user at a time."""
 
-    def __init__(self, db_path: str = ":memory:"):
+    def __init__(self, db_path: str = ":memory:", data_dir: Optional[str] = None):
+        # One lock for everything that touches the database. The server runs one thread per request
+        # (ThreadingHTTPServer); SQLite gets one shared connection, and this lock lets one request at a
+        # time use it. Reading an upload and resizing a photo happen outside the lock.
         self.lock = threading.RLock()
         self.db_path = db_path
+        self.data_dir = Path(data_dir) if data_dir else photos.data_dir(db_path)
         self.thresholds = load_thresholds()
         self.reset()
 
@@ -434,6 +451,190 @@ class Service:
             v = self.store.save_asset_version(self.report_object(rid), rid, by.strip())
             return v
 
+    # ---------- photos ----------
+    def upload_photo(self, object_id, name: str, data: bytes, by: str) -> dict:
+        """Check, store and number one uploaded photo and propose its link. The slow part (Pillow) runs
+        outside the lock. A photo that is already in this project (same sha256) is skipped."""
+        if not (by or "").strip():
+            raise ValueError("enter the inspector name first: every upload is signed")
+        name = Path(name or "photo.jpg").name[:200]
+        with self.lock:
+            oid = self.oid(object_id)
+        sha = photos.sha256(data)
+        with self.lock:
+            dup = self.store.photo_by_sha(oid, sha)
+        if dup:
+            return {"skipped": True, "message": f"{name} is already here as photo {dup['photo_no']}: skipped"}
+        full, thumb, w, h = photos.process(data)              # refuses anything that is not a real JPG or PNG
+        photos.store_files(self.data_dir, oid, sha, full, thumb)
+        with self.lock:
+            dup = self.store.photo_by_sha(oid, sha)           # another window may have sent the same file meanwhile
+            if dup:
+                return {"skipped": True, "message": f"{name} is already here as photo {dup['photo_no']}: skipped"}
+            f = {"stored_name": sha, "original_name": name, "sha256": sha, "mime": "image/jpeg", "width": w, "height": h}
+            rows = self.store.photos(oid)
+            fill = next((r for r in rows if r["stored_name"] is None and photos.matches_photo_no(name, r["photo_no"])), None)
+            if fill is not None:
+                pid = self.store.add_photo_file(oid, f, by, fill_id=fill["id"])
+                return {"id": pid, "photo_no": fill["photo_no"], "linked": bool(fill["sample_code"] or fill["source_no"]),
+                        "message": f"{name} -> photo {fill['photo_no']} (its number was already registered)"}
+            reg = self.store.register(oid)
+            sample, source, reason = photos.propose(name, {x.id: x.source for x in reg}, self.store.sources(oid))
+            f.update(photo_no=photos.next_photo_no(r["photo_no"] for r in rows),
+                     proposed_sample=sample, proposed_source=source, proposal_reason=reason)
+            pid = self.store.add_photo_file(oid, f, by)
+            return {"id": pid, "photo_no": f["photo_no"], "linked": bool(sample or source),
+                    "message": f"{name} -> photo {f['photo_no']}: {reason}"}
+
+    def photo_file(self, object_id, photo_id: int, thumb: bool) -> Path:
+        """The file of a photo, only when the photo belongs to the project the request names."""
+        if object_id in (None, ""):
+            raise ValueError("name the project")
+        oid = self.oid(object_id)
+        row = self.store.photo(photo_id)
+        if row is None or row["object_id"] != oid or not row["stored_name"]:
+            raise ValueError("photo not found in this project")
+        return photos.photo_path(self.data_dir, oid, row["stored_name"], thumb=thumb)
+
+    def default_description(self, oid: int, sample_code: Optional[str], source_no: Optional[str]) -> str:
+        """'<location> - <material/application>' of the photo's sample, or the first sample of its source."""
+        reg = self.store.register(oid)
+        s = next((x for x in reg if x.id == sample_code), None) or next((x for x in reg if source_no and x.source == source_no), None)
+        if s is None:
+            return ""
+        return f"{s.location} - {', '.join(x for x in (s.material, s.part) if x)}"
+
+    def update_photo(self, object_id, photo_id: int, f: dict, by: str) -> None:
+        """Number, description or link of one photo. A link to a sample also sets that sample's source.
+        An empty description is filled from the linked source."""
+        with self.lock:
+            oid = self.oid(object_id)
+            row = self.store.photo(photo_id)
+            if row is None or row["object_id"] != oid:
+                raise ValueError("unknown photo in this project")
+            changes = {k: f[k] for k in ("photo_no", "description") if k in f}
+            if "link" in f:                                   # "sample:MM-1", "source:B01" or "" (not linked)
+                kind, _, value = (f.get("link") or "").partition(":")
+                sample = value if kind == "sample" else None
+                source = value if kind == "source" else None
+                if sample:
+                    source = next((x.source for x in self.store.register(oid) if x.id == sample), None) or None
+                changes.update(sample_code=sample, source_no=source)
+                if (sample or source) and not (changes.get("description") or row["description"]):
+                    changes["description"] = self.default_description(oid, sample, source)
+            self.store.update_photo(oid, photo_id, changes, by)
+
+    def accept_photo_proposals(self, object_id, by: str) -> int:
+        """Accept every proposed link of photos that are not linked yet: one click for the whole batch."""
+        with self.lock:
+            oid = self.oid(object_id)
+            n = 0
+            for r in self.store.photos(oid):
+                if not (r["sample_code"] or r["source_no"]) and (r["proposed_sample"] or r["proposed_source"]):
+                    link = f"sample:{r['proposed_sample']}" if r["proposed_sample"] else f"source:{r['proposed_source']}"
+                    self.update_photo(oid, r["id"], {"link": link}, by)
+                    n += 1
+            return n
+
+    def photos_with_file(self, oid: int, reg) -> Dict[str, List[str]]:
+        """Photo numbers with a file, per sample code: its own photos plus those of its source."""
+        rows = [r for r in self.store.photos(oid) if r["stored_name"]]
+        out = {}
+        for s in reg:
+            out[s.id] = [r["photo_no"] for r in rows if r["sample_code"] == s.id or (s.source and r["source_no"] == s.source)]
+        return out
+
+    def set_certificate(self, rid: int, idx: int, certificate: str, by: str) -> None:
+        with self.lock:
+            if self.store.signoff(rid):
+                raise ValueError("this report is signed: it can no longer change")
+            self.store.set_certificate(rid, idx, certificate, by)
+
+    def confirm_check(self, object_id, key: str, by: str) -> None:
+        """Mark a link-check warning as checked (only warnings can be confirmed; errors must be fixed)."""
+        with self.lock:
+            oid = self.oid(object_id)
+            issue = next((i for i in self.link_check(oid) if i.get("key") == key), None)
+            if issue is None or issue["severity"] != "warning":
+                raise ValueError("only an open warning of the link check can be marked as checked")
+            self.store.confirm_check(oid, key, issue["text"], by)
+
+    # ---------- link check: one list for the bronbladen page, the export and sign-off ----------
+    def link_check(self, oid: int) -> List[dict]:
+        """Every broken link between photo, source, sample, lab result and certificate, one line each,
+        with where to fix it. Errors first. An empty list means all links are complete."""
+        from ai.james_ai.linker import alias_key, code_parts, std_prefix
+        reg = self.store.register(oid)
+        sources = self.store.sources(oid)
+        rows = self.store.photos(oid)
+        issues: List[dict] = []
+
+        def add(rule, severity, text, fix, key=None):
+            issues.append({"rule": rule, "severity": severity, "text": text, "fix": fix, "key": key})
+
+        group = lambda code: group_for_code(code)["key"]
+        for r in rows:
+            if not (r["sample_code"] or r["source_no"]):
+                add("photo_unlinked", "error", f"Photo {r['photo_no']}" + (f" ({r['original_name']})" if r["original_name"] else " (no file yet)")
+                    + " is not linked to a source or sample.", {"page": "fieldwork", "photo": r["id"]})
+        by_source = {no: [s.id for s in reg if s.source == no] for no in sources}
+        for no, codes in by_source.items():
+            n = sum(1 for r in rows if r["stored_name"] and (r["source_no"] == no or r["sample_code"] in codes))
+            fix = {"page": "fieldwork", "photos": True, "group": group(codes[0]) if codes else None}
+            if n == 0:
+                add("source_no_photo", "error", f"Source {no} has no photo yet" + (f" ({', '.join(codes)})." if codes else "."), fix)
+            elif n > 4:
+                add("source_too_many", "error", f"Source {no} has {n} photos; a bronblad holds at most 4. Unlink the extra ones.", fix)
+        for s in reg:
+            if not (s.source or "").strip():
+                add("sample_no_source", "error", f"Sample {s.id} has no source number.",
+                    {"page": "fieldwork", "group": group(s.id), "sample": s.id})
+        reports = [r["id"] for r in self.store.db.execute("SELECT id FROM lab_report WHERE object_id=? ORDER BY id", (oid,))
+                   if not self.is_practice(r["id"])]
+        approved, lines = set(), []
+        for rid in reports:
+            dec = self.store.current_decisions(rid)
+            for r in self.store.rows(rid):
+                d = dec.get(r["idx"])
+                lines.append((rid, r, d))
+                if d and d["state"] in ("approved", "corrected"):
+                    approved.add(d["sample_code"])
+        keys = {alias_key(s.id): s.id for s in reg}
+        for s in reg:
+            if s.status != "not sampled" and s.id not in approved:
+                line = next(((rid, r) for rid, r, d in lines if d is None and r["ai_code"] == s.id), None)
+                fix = ({"page": "lab", "report": line[0], "line": line[1]["idx"]} if line
+                       else {"page": "fieldwork", "group": group(s.id), "sample": s.id})
+                add("sample_no_result", "error", f"Sample {s.id} has no approved lab result. "
+                    + ("Approve its lab line." if line else "Read the lab report with its result, or register it as not sampled with the reason."), fix)
+        for rid, r, d in lines:
+            raw = (r["raw_id"] or "").strip()
+            if d and d["state"] in ("approved", "corrected") and not (r["certificate"] or "").strip():
+                add("result_no_certificate", "error", f"Approved result {raw or 'line ' + str(r['idx'] + 1)} → {d['sample_code']} has no certificate number.",
+                    {"page": "lab", "report": rid, "line": r["idx"]})
+            if raw and raw != "-" and d is None and alias_key(raw) not in keys:
+                add("code_not_in_register", "error", f"Lab line {r['idx'] + 1}: code {raw} is not in the register.",
+                    {"page": "lab", "report": rid, "line": r["idx"]})
+        seen = {}
+        for s in reg:                                        # the same sample written twice (M-3 and MM-3)
+            k = alias_key(s.id)
+            if k and k in seen:
+                add("same_sample_twice", "error", f"{seen[k]} and {s.id} are the same sample in two notations.",
+                    {"page": "fieldwork", "group": group(s.id), "sample": s.id})
+            elif k:
+                seen[k] = s.id
+        confirmed = self.store.confirmed_checks(oid)
+        parts = [(s.id, code_parts(s.id)) for s in reg]
+        for i, (a, pa) in enumerate(parts):                  # MM-12 and HM-12: one letter apart, same number
+            for b, pb in parts[i + 1:]:
+                if pa and pb and pa[1] == pb[1] and _one_letter_apart(std_prefix(pa[0]), std_prefix(pb[0])):
+                    key = f"{a}/{b}"
+                    if key not in confirmed:
+                        add("prefix_only", "warning", f"Check: {a} and {b} differ only by prefix. A lab could mix them up.",
+                            {"confirm": key}, key)
+        issues.sort(key=lambda i: i["severity"] != "error")
+        return issues
+
     # ---------- view for the screen ----------
     def view(self, rid: Optional[int] = None, object_id=None) -> dict:
         """Everything the screen shows for one project. A report of another project is never shown in it."""
@@ -449,6 +650,7 @@ class Service:
             obj["info"] = self.store.project_info(oid)
             reg = self.store.register(oid)
             sources = self.store.sources(oid)
+            shots = self.photos_with_file(oid, reg)
             # lab lines without a decision, over every report of this project (badge on the Lab results tab)
             open_lines = self.store.db.execute(
                 "SELECT COUNT(*) FROM lab_row r JOIN lab_report l ON l.id = r.report_id WHERE l.object_id=? "
@@ -456,17 +658,26 @@ class Service:
             out = {"object": obj,
                    "objects": [{"id": o["id"], "name": o["name"], "project": o["project"]} for o in self.store.objects()],
                    "register": [{"code": s.id, "source": s.source, "location": s.location, "part": s.part,
-                                 "material": s.material, "notes": s.notes, "photo": s.photo, "deck": s.deck,
+                                 "material": s.material, "notes": s.notes, "photo": ", ".join(shots[s.id]), "deck": s.deck,
+                                 "photos": len(shots[s.id]),
                                  "status": s.status, "restriction": s.restriction, "drawing": s.drawing,
                                  "quantity": s.quantity, "unit": s.unit, "group": group_for_code(s.id),
                                  "condition": (sources[s.source]["condition"] or "") if s.source in sources else "",
-                                 "missing": [n for n, v in (("source", s.source), ("deck", s.deck), ("photo", s.photo),
+                                 "missing": [n for n, v in (("source", s.source), ("deck", s.deck), ("photo", shots[s.id]),
                                                             ("drawing", s.drawing)) if not v and s.status == "sampled"]}
                                 for s in reg],
                    "register_log": [{"at": e["changed_at"], "by": e["changed_by"], "code": e["code"],
                                      "action": e["action"], "detail": e["detail"]}
                                     for e in self.store.register_log(oid)
-                                    if not e["action"].startswith(("source ", "photo "))],   # those show on the bronbladen
+                                    if not e["action"].startswith(SOURCE_PHOTO_ACTIONS)],   # those show on the bronbladen
+                   "photos": [{"id": r["id"], "photo_no": r["photo_no"], "file": bool(r["stored_name"]),
+                               "original_name": r["original_name"] or "", "description": r["description"] or "",
+                               "sample": r["sample_code"], "source": r["source_no"],
+                               "proposed_sample": r["proposed_sample"], "proposed_source": r["proposed_source"],
+                               "proposal_reason": r["proposal_reason"] or ""} for r in self.store.photos(oid)],
+                   "sources": sorted(sources),
+                   "link_check": self.link_check(oid),
+                   "photo_max_mb": photos.max_photo_bytes() // (1024 * 1024),
                    "conditions": CONDITIONS,
                    "reports": reports, "report": None, "open_lines": open_lines,
                    "groups": self.groups_view(reg),
@@ -493,6 +704,7 @@ class Service:
 
     def report_view(self, rid: int, reg) -> dict:
         run = self.run_for(rid)
+        shots = self.photos_with_file(self.report_object(rid), reg)
         reg_by = {s.id: s for s in reg}
         rep = self.store.db.execute("SELECT * FROM lab_report WHERE id=?", (rid,)).fetchone()
         decisions = self.store.current_decisions(rid)
@@ -516,7 +728,7 @@ class Service:
                     {"ok": raw == sample.id, "text": "ID written exactly as in the field registration" if raw == sample.id
                      else f"ID written “{raw or 'none'}”, registration says {sample.id}"},
                     {"ok": True, "text": "Sample exists in the register"},
-                    {"ok": bool(sample.photo), "text": "Photo on file" if sample.photo else "Photo missing"},
+                    {"ok": bool(shots[sample.id]), "text": f"Photo {', '.join(shots[sample.id])}" if shots[sample.id] else "Photo missing"},
                     {"ok": bool(r["certificate"]), "text": "Certificate number on the lab line" if r["certificate"]
                      else "No certificate number"},
                 ]
@@ -530,13 +742,13 @@ class Service:
                              "reason": p["reason"], "source": src, "sent_to_ai": n in run.sent},
                 "chain": None if sample is None else {"sample": sample.id, "source": sample.source, "deck": sample.deck,
                                                       "location": sample.location, "material": f"{sample.material}, {sample.notes}".strip(", "),
-                                                      "photo": sample.photo, "ship": ship},
+                                                      "photo": ", ".join(shots[sample.id]), "ship": ship},
                 "checks": checks,
                 "decision": None if d is None else {"state": d["state"], "sample": d["sample_code"], "by": d["decided_by"],
                                                     "at": d["decided_at"], "note": d["note"]},
             })
-        flags = self.flags(rid, rows, reg)
-        report = self.ihm_sections(rid, rows, reg_by)
+        flags = self.flags(rid, rows, reg, shots)
+        report = self.ihm_sections(rid, rows, reg_by, shots)
         total = len(rows)
         counts = {"total": total,
                   "certain": sum(r["proposal"]["label"] == "certain" for r in rows),
@@ -578,7 +790,7 @@ class Service:
                 "rows": rows, "counts": counts, "flags": flags, "ai_note": ai_note,
                 "ihm": report, "open_items": open_items, "signed": signed, "timing": timing, "audit": audit}
 
-    def ihm_sections(self, rid: int, rows: List[dict], reg_by: dict) -> dict:
+    def ihm_sections(self, rid: int, rows: List[dict], reg_by: dict, shots: Optional[Dict[str, List[str]]] = None) -> dict:
         """The report sections in the layout of the RVL IHM template, from approved lines only.
 
         Project Information, Part I lists I-1 / I-2 / I-3 (each with its own columns),
@@ -626,7 +838,8 @@ class Service:
                                        "sample": s.id, "certificate": r["certificate"], "location": where,
                                        "material": s.material, "result": f["text"], "quantity": src_qty or qty,
                                        "condition": pick("condition"),
-                                       "conclusion": pick("conclusion") or conclusion, "photo": s.photo, "drawing": s.drawing,
+                                       "conclusion": pick("conclusion") or conclusion,
+                                       "photo": ", ".join((shots or {}).get(s.id, [])), "drawing": s.drawing,
                                        "listed": listed})
                 sec["lab"].append({"sample": s.id, "certificate": r["certificate"], "method": r["method"],
                                    "result": f["text"], "remarks": r["remarks"], "quantity": r["quantity"] or qty})
@@ -671,6 +884,8 @@ class Service:
                 out.append(f"{f['ref']}: {f['text']}")
         for m in ihm["manual"]:
             out.append(f"{m['sample']}: {m['note']}")
+        for i in self.link_check(self.report_object(rid)):          # the same list as the bronbladen page
+            out.append(f"Link check ({i['severity']}): {i['text']}")
         for t in ("table_a", "table_b"):
             for x in ihm[t]:
                 if x["found"] and x["quantity"] is None:
@@ -678,7 +893,7 @@ class Service:
                                f"(not every source of {', '.join(x['samples'])} has a quantity in the same unit).")
         return out
 
-    def flags(self, rid: int, rows: List[dict], reg) -> List[dict]:
+    def flags(self, rid: int, rows: List[dict], reg, shots: Dict[str, List[str]]) -> List[dict]:
         out = []
         linked = {r["proposal"]["sample"] for r in rows if r["proposal"]["sample"]}
         decided = {r["decision"]["sample"] for r in rows if r["decision"] and r["decision"]["sample"]}
@@ -705,7 +920,7 @@ class Service:
             if s.id not in linked and s.id not in decided:
                 out.append({"kind": "missing", "ref": s.id, "line": None,
                             "text": f"Sample {s.id} ({s.material.lower()}, {s.location}) has no lab result."})
-            elif not s.photo:
+            elif not shots.get(s.id):
                 out.append({"kind": "completeness", "ref": s.id, "line": None,
                             "text": f"No photo ID for {s.id}. Required for the Materials List (photo + location for every hazardous material)."})
             if s.id in linked | decided and not s.drawing:
@@ -789,13 +1004,17 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/"):
                 return self.send_json({"error": "login required"}, 401)
             return self.redirect("/login")
+        m = re.fullmatch(r"/api/photo/(\d+)(/thumb)?", path)
+        if m:
+            return self.get_photo(int(m.group(1)), bool(m.group(2)))
         if path in ("/", "/index.html"):
             self.send_html((STATIC / "index.html").read_text(encoding="utf-8"))
         elif path == "/api/export":
             q = dict(kv.split("=", 1) for kv in self.path.partition("?")[2].split("&") if "=" in kv)
             try:
                 rid = int(q.get("report", ""))
-                data, name = SERVICE.export(rid)
+                with SERVICE.lock:
+                    data, name = SERVICE.export(rid)
             except (ValueError, KeyError, FileNotFoundError) as e:
                 return self.send_json({"error": str(e)}, 400)
             self.send_response(200)
@@ -809,15 +1028,74 @@ class Handler(BaseHTTPRequestHandler):
             q = dict(kv.split("=", 1) for kv in self.path.partition("?")[2].split("&") if "=" in kv)
             rid = int(q["report"]) if q.get("report", "").isdigit() else None
             try:
-                self.send_view(rid, user, q.get("object") or None)
+                with SERVICE.lock:
+                    self.send_view(rid, user, q.get("object") or None)
             except ValueError as e:
                 self.send_json({"error": str(e)}, 400)
         else:
             self.send_json({"error": "not found"}, 404)
 
-    def do_POST(self):
+    def get_photo(self, photo_id: int, thumb: bool) -> None:
+        """GET /api/photo/<id>[/thumb]?object=<id>. The photo's project is looked up in the database and must
+        be the project the request names; the file path is built only from the generated stored name."""
+        q = parse_qs(urlsplit(self.path).query)
         try:
-            length = int(self.headers.get("Content-Length") or 0)
+            with SERVICE.lock:
+                path = SERVICE.photo_file(q.get("object", [None])[0], photo_id, thumb)
+            data = path.read_bytes()
+        except (ValueError, FileNotFoundError):
+            return self.send_json({"error": "photo not found in this project"}, 404)
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "private, max-age=300")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def body_length(self, limit: int) -> Optional[int]:
+        """The size the browser announces. Missing or too large: refused before one byte of the body is read,
+        so a 40 MB upload never fills the server's memory."""
+        raw = self.headers.get("Content-Length")
+        if raw is None or not raw.strip().isdigit():
+            self.send_json({"error": "the request has no Content-Length"}, 411)
+            return None
+        if int(raw) > limit:
+            self.close_connection = True
+            self.send_json({"error": f"the upload is larger than {limit // (1024 * 1024)} MB"}, 413)
+            return None
+        return int(raw)
+
+    def post_photo(self) -> None:
+        """POST /api/photo?object=<id>&name=<file name>, the raw image as body (no base64)."""
+        length = self.body_length(photos.max_photo_bytes())
+        if length is None:
+            return
+        user = self.current_user()
+        if user is None:
+            self.close_connection = True
+            return self.send_json({"error": "login required"}, 401)
+        q = parse_qs(urlsplit(self.path).query)
+        name = (q.get("name") or ["photo.jpg"])[0]
+        data = self.rfile.read(length)                       # outside the lock: other windows keep working
+        if len(data) != length:                              # the browser stopped sending (closed, cancelled)
+            self.close_connection = True
+            return
+        try:
+            # with login on, the logged-in name; on your own laptop, the inspector name typed at the top
+            by = user or unquote(self.headers.get("X-Inspector", ""))
+            out = SERVICE.upload_photo(q.get("object", [None])[0], name, data, by)
+        except (ValueError, KeyError, TypeError) as e:
+            return self.send_json({"error": f"{name}: {e}"}, 400)
+        self.send_json(out)
+
+    def do_POST(self):
+        if urlsplit(self.path).path == "/api/photo":
+            return self.post_photo()
+        length = self.body_length(MAX_JSON_BYTES)
+        if length is None:
+            return
+        try:
             body = json.loads(self.rfile.read(length) or b"{}")
             path = self.path.split("?")[0]
             if path == "/api/login" and AUTH.enabled:
@@ -849,6 +1127,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "login required"}, 401)
             if user:
                 body["by"] = user          # with login, the signature is always the logged-in name
+            with SERVICE.lock:             # one request at a time inside the database (see Service.lock)
+                return self.dispatch_post(path, body, user)
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError, binascii.Error) as e:
+            self.send_json({"error": str(e)}, 400)
+
+    def dispatch_post(self, path: str, body: dict, user: str) -> None:
+        try:
             oid = body.get("object")                 # the project this browser tab shows (from its URL)
             if path == "/api/reset":
                 SERVICE.reset()
@@ -893,9 +1178,22 @@ class Handler(BaseHTTPRequestHandler):
                 rid = SERVICE.load_practice(oid)
             elif path == "/api/upload-pdf":
                 data = base64.b64decode(body.get("pdf_base64", ""), validate=True)
-                if len(data) > 20 * 1024 * 1024:
-                    raise ValueError("the PDF is larger than 20 MB")
+                if len(data) > MAX_PDF_BYTES:
+                    raise ValueError("the PDF is larger than 18 MB")
                 rid = SERVICE.ingest_pdf(body.get("label", ""), data, oid)
+            elif path == "/api/photo-update":
+                SERVICE.update_photo(oid, int(body["id"]), body, body.get("by", ""))
+                rid = body.get("report_id")
+            elif path == "/api/photo-accept":
+                SERVICE.accept_photo_proposals(oid, body.get("by", ""))
+                rid = body.get("report_id")
+            elif path == "/api/certificate":
+                rid = int(body["report_id"])
+                SERVICE.set_certificate(rid, int(body["idx"]), body.get("certificate", ""), body.get("by", ""))
+                oid = SERVICE.report_object(rid)
+            elif path == "/api/check-confirm":
+                SERVICE.confirm_check(oid, body.get("key", ""), body.get("by", ""))
+                rid = body.get("report_id")
             else:
                 return self.send_json({"error": "not found"}, 404)
             self.send_view(rid, user, oid)
@@ -921,7 +1219,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("WARNING: no login. Anyone who can reach this address can use the app. "
               "Set JAMES_USERS to switch the login on.")
     SERVICE = Service(args.db)
-    srv = HTTPServer((args.host, args.port), Handler)
+    srv = ThreadingHTTPServer((args.host, args.port), Handler)      # one slow upload no longer blocks others
+    srv.daemon_threads = True
     print(f"James is running: http://{args.host}:{args.port}   (stop with Ctrl+C)"
           + ("   [login on]" if AUTH.enabled else ""))
     try:

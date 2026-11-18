@@ -2,6 +2,8 @@
 rem Start the James app: data is kept in james.db, the browser opens by itself.
 cd /d "%~dp0"
 if exist ".venv\Scripts\python.exe" (set PY=.venv\Scripts\python.exe) else (set PY=python)
+rem Install or update what the app needs (quick when nothing changed; skipped with a note when offline).
+%PY% -m pip install --quiet --disable-pip-version-check -r requirements.txt || echo Note: could not install from requirements.txt (offline?). Trying to start anyway.
 if not exist "context\IHM 26-.odt" if "%JAMES_IHM_TEMPLATE%"=="" (
   echo Note: RVL's IHM template is not in context\. The app works, but "Download IHM report" will not.
   echo Ask Ivan or Tasnim for the template and put it in the context folder.
@@ -11,6 +13,6 @@ start "" http://127.0.0.1:8000
 %PY% app\server.py --db james.db
 if errorlevel 1 (
   echo.
-  echo The app stopped with an error. Is Python installed and did "pip install pdfplumber reportlab pillow" run?
+  echo The app stopped with an error. Is Python installed and did "pip install -r requirements.txt" run?
   pause
 )

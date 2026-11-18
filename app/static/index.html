@@ -302,6 +302,18 @@
   details.fold > summary { padding: var(--s-4) var(--s-5); cursor: pointer; font-weight: 600; }
   details.fold[open] > summary { padding-bottom: var(--s-3); }
   .btn-link { font-size: var(--fs-sm); font-weight: 500; }
+  .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-4); margin-top: var(--s-4); }
+  .ph { margin: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); min-width: 0; }
+  .ph img, .ph-missing { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-2); }
+  .ph-missing { display: grid; place-content: center; text-align: center; gap: 4px; color: var(--text-2); font-size: var(--fs-sm); }
+  .ph figcaption { display: grid; gap: var(--s-2); padding: var(--s-3); }
+  .callout.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .issues { display: grid; gap: var(--s-2); }
+  .issue { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); border: 1px solid var(--border); border-radius: var(--r-sm); }
+  .issue > span:nth-child(2) { flex: 1; min-width: 0; }
+  .act.cert { align-items: center; }
+  @keyframes flash { from { box-shadow: 0 0 0 3px var(--warn); } to { box-shadow: 0 0 0 3px transparent; } }
+  .flash { animation: flash 2.5s ease-out; }
   .fw-tabs { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: var(--s-2) 0 var(--s-3); }
   .fw-tabs .spacer { flex: 1; }
   .fw-tab[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--text); }
@@ -452,7 +464,13 @@ async function onRoute() {
   if (r.oid !== route.oid) { editCode = null; reopened.clear(); }
   else if (r.rid !== route.rid) reopened.clear();
   route = r;
-  if (await load()) window.scrollTo(0, 0);    // a new page starts at the top, on purpose
+  if (await load()) {
+    window.scrollTo(0, 0);                    // a new page starts at the top, on purpose
+    if (pendingFix) {                         // ... unless a Fix button asked for a place on it
+      const el = $(pendingFix); pendingFix = null;
+      if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("flash"); }
+    }
+  }
 }
 async function load() {
   const seq = ++loadSeq;
@@ -505,7 +523,7 @@ async function logout() { try { await fetch("/api/logout", { method: "POST", hea
 
 // ---------- Unsent form text: kept per project page while you click around or switch tabs ----------
 const draftStore = {};
-const DRAFT = /^(rf-|in-|note-|pick-\d)/;
+const DRAFT = /^(rf-|in-|note-|pick-\d|cert-)/;
 const draftKey = () => route.oid ? route.oid + "/" + route.page : null;
 function changed(el) {
   if (el.tagName === "SELECT") return el.value !== ([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value;
@@ -630,14 +648,16 @@ function dashboardPage() {
   const filled = INTAKE.filter(([k]) => intakeValue(k)).length, gaps = reg.filter(s => s.missing.length).length;
   const unknownCodes = reg.filter(s => s.group && s.group.unknown).length;
   const cards = [
-    ["upload", "Not built yet", "One place for photos, reports and the intake form. Lab reports are uploaded on Lab results for now.", "todo"],
+    ["upload", "Not built yet", "One place for photos, reports and the intake form. For now: photos on Fieldwork, lab reports on Lab results.", "todo"],
     ["intake", `${filled} of ${INTAKE.length} fields filled`, "Project details for the title page of the report.", filled === INTAKE.length ? "done" : "open"],
     ["desk-research", "Not built yet", "Drawings and documents of the object.", "todo"],
     ["fieldwork", `${reg.length} sample${reg.length === 1 ? "" : "s"} registered`, !reg.length ? "Register the samples from site"
       : [unknownCodes ? `${unknownCodes} with an unknown code` : "", gaps ? `${gaps} with missing fields` : "No missing fields"].filter(Boolean).join(" · "),
       reg.length && !gaps && !unknownCodes ? "done" : "open"],
     ["lab", `${S.reports.length} lab report${S.reports.length === 1 ? "" : "s"}`, !S.reports.length ? "No lab report yet" : n ? `${n} line${n === 1 ? "" : "s"} without a decision` : "Every line decided", S.reports.length && !n ? "done" : "open"],
-    ["bronbladen", "Not built yet", "One source sheet per source: photos, sample, location and certificate.", "todo"],
+    ["bronbladen", !Array.isArray(S.link_check) ? "Link check" : S.link_check.length ? `${S.link_check.length} link issue${S.link_check.length === 1 ? "" : "s"}` : "All links complete",
+     `${(S.photos || []).filter(p => p.file).length} photo${(S.photos || []).filter(p => p.file).length === 1 ? "" : "s"} with a file`,
+     Array.isArray(S.link_check) && !S.link_check.length ? "done" : "open"],
     ["report", r ? (r.signed ? "Final (signed)" : "Draft") : "No report yet", r ? `${esc(r.ref || r.label)}: ${r.counts.decided} of ${r.counts.total} lines decided` : "Needs a lab report first", r && r.signed ? "done" : "open"],
   ].map(([id, value, detail, state]) => `<a class="status ${state}" href="${href(id, o.id, currentReport)}">
       <span class="eyebrow">${PAGES.find(p => p[0] === id)[1]}</span><b>${value}</b><span class="small">${detail}</span></a>`).join("");
@@ -688,8 +708,114 @@ function wireIntake() {
   };
 }
 
-function fieldworkPage() { return pageHead("Fieldwork", "Sources and samples as recorded on site.") + registration(); }
+function fieldworkPage() { return pageHead("Fieldwork", "Sources and samples as recorded on site.") + registration() + photosPanel(); }
+
+// ---------- Photos: upload a batch, check the proposed links, fix them ----------
+const photoReport = {};                       // per project: the summary of the last upload batch
+function photosPanel() {
+  const ph = S.photos || [], unlinked = ph.filter(p => !p.sample && !p.source);
+  const proposals = unlinked.filter(p => p.proposed_sample || p.proposed_source);
+  const linkOptions = (p) => {
+    const cur = p.sample ? "sample:" + p.sample : p.source ? "source:" + p.source : "";
+    return `<option value="">Not linked</option>` +
+      S.register.map(s => `<option value="sample:${esc(s.code)}" ${cur === "sample:" + s.code ? "selected" : ""}>${esc(s.code)} · ${esc(s.material)}${s.source ? " (" + esc(s.source) + ")" : ""}</option>`).join("") +
+      (S.sources || []).map(no => `<option value="source:${esc(no)}" ${cur === "source:" + no ? "selected" : ""}>Source ${esc(no)} (whole source)</option>`).join("");
+  };
+  const card = (p) => `<figure class="ph" id="photo-${p.id}">
+      ${p.file ? `<img src="/api/photo/${p.id}/thumb?object=${route.oid}" alt="Photo ${esc(p.photo_no)}${p.description ? ": " + esc(p.description) : ""}" loading="lazy">`
+               : `<div class="ph-missing">Photo missing<span class="small">number known, no file yet</span></div>`}
+      <figcaption>
+        <label class="field">Number<input class="ph-no" data-id="${p.id}" value="${esc(p.photo_no)}"></label>
+        <label class="field">Link<select class="ph-link" data-id="${p.id}">${linkOptions(p)}</select></label>
+        ${p.sample || p.source ? "" : p.proposed_sample || p.proposed_source
+          ? `<div class="small">Proposed: <b>${esc(p.proposed_sample || "source " + p.proposed_source)}</b> · ${esc(p.proposal_reason)}</div>`
+          : `<div class="small miss">${esc(p.proposal_reason || "Not linked")}</div>`}
+        <label class="field">Description<input class="ph-desc" data-id="${p.id}" value="${esc(p.description)}" placeholder="Filled in when you link it"></label>
+        ${p.original_name ? `<div class="small muted">${esc(p.original_name)}</div>` : ""}
+      </figcaption></figure>`;
+  const rep = photoReport[route.oid];
+  const summary = rep ? `<div class="callout ${rep.refused.length ? "warn" : "ok"}" role="status"><b>${rep.done} photo${rep.done === 1 ? "" : "s"} uploaded, ${rep.linked} with a proposed link.</b>
+      ${rep.skipped.length ? `<br>Skipped: ${rep.skipped.map(esc).join("; ")}` : ""}${rep.refused.length ? `<br>Refused: ${rep.refused.map(esc).join("; ")}` : ""}</div>` : "";
+  return `<section class="panel" id="photos" style="margin-top:24px">
+    ${panelHead("Photos", "Photos and their link", "Upload the photos of the survey in one go. James numbers them, proposes a link from the file name (a sample or source code such as M01 or B4) and you check it. JPG or PNG, up to " + esc(S.photo_max_mb) + " MB each. Location data (GPS) is removed when a photo is stored.",
+      `<span class="small">${ph.length} photo${ph.length === 1 ? "" : "s"} · ${unlinked.length} not linked</span>`)}
+    <div class="panel-body">
+      <div class="actions"><label class="filebtn">Upload photos<input type="file" id="ph-upload" accept="image/jpeg,image/png" multiple></label>
+        <span id="ph-progress" class="small" role="status" aria-live="polite"></span><span class="spacer"></span>
+        ${proposals.length ? `<button id="ph-accept" class="primary">Accept all proposals (${proposals.length})</button>` : ""}</div>
+      ${summary}
+      ${ph.length ? `<div class="ph-grid">${ph.map(card).join("")}</div>` : `<div class="empty">No photos yet.</div>`}
+    </div></section>`;
+}
+async function uploadPhotos(files) {
+  if (needName()) return;
+  const list = [...files], max = (S.photo_max_mb || 15) * 1024 * 1024, oid = route.oid;
+  const rep = { done: 0, linked: 0, skipped: [], refused: [] };
+  pending++; document.documentElement.classList.add("is-busy");
+  try {
+    for (let i = 0; i < list.length; i++) {                     // one at a time: "7 of 20"
+      const f = list[i], st = $("#ph-progress");
+      if (st) st.textContent = `Uploading ${i + 1} of ${list.length}: ${f.name}`;
+      if (f.size > max) { rep.refused.push(`${f.name}: larger than ${S.photo_max_mb} MB`); continue; }
+      try {
+        const res = await fetch(`/api/photo?object=${oid}&name=${encodeURIComponent(f.name)}`, { method: "POST", body: f,
+          headers: { "Content-Type": "application/octet-stream", "X-Inspector": encodeURIComponent(inspector) } });
+        if (res.status === 401) { location.href = "/login"; return; }
+        const d = await res.json().catch(() => ({ error: `${f.name}: refused by the server (${res.status})` }));
+        if (!res.ok) rep.refused.push(d.error);
+        else if (d.skipped) rep.skipped.push(d.message);
+        else { rep.done++; if (d.linked) rep.linked++; }
+      } catch (e) { rep.refused.push(`${f.name}: the upload was cut off (too large, or the connection was lost)`); }
+    }
+  } finally {
+    if (--pending === 0) document.documentElement.classList.remove("is-busy");
+  }
+  photoReport[oid] = rep;
+  if (route.oid === oid) await refresh();
+}
+function wirePhotos() {
+  const up = $("#ph-upload"); if (up) up.onchange = () => uploadPhotos(up.files);
+  const acc = $("#ph-accept"); if (acc) acc.onclick = () => { if (needName()) return; post("/api/photo-accept", { by: inspector }).catch(() => {}); };
+  const save = (el, field) => {
+    if (needName()) return;
+    const id = Number(el.dataset.id);
+    post("/api/photo-update", { id, [field]: el.value, by: inspector }, { anchor: `#photo-${id}` }).catch(() => {});
+  };
+  document.querySelectorAll(".ph-link").forEach(el => el.onchange = () => save(el, "link"));
+  document.querySelectorAll(".ph-no").forEach(el => el.onchange = () => save(el, "photo_no"));
+  document.querySelectorAll(".ph-desc").forEach(el => el.onchange = () => save(el, "description"));
+}
+
+// ---------- Bronbladen: the link check, one line per broken link, each with its fix ----------
+let pendingFix = null;                        // where to scroll after a Fix button changed page
+function doFix(fix) {
+  if (fix.page === "fieldwork") {
+    const st = fw(); if (fix.group) st.tab = fix.group;
+    if (fix.sample) { editCode = fix.sample; pendingFix = "#regform"; }
+    else pendingFix = fix.photo ? `#photo-${fix.photo}` : "#photos";
+  } else if (fix.page === "lab") pendingFix = `.prop[data-idx="${fix.line}"]`;
+  go(href(fix.page, route.oid, fix.report || null));
+}
+function bronbladenPage() {
+  const head = pageHead("Bronbladen", "The link check: every broken link between photo, source, sample, lab result and certificate. Sign-off and the report use the same list.");
+  const issues = S.link_check;
+  if (!Array.isArray(issues)) return head + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="empty">The link check needs the James app.</div></div></section>`;
+  if (!issues.length) return head + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><div class="callout ok"><b>All links complete.</b> Every photo, source, sample, lab result and certificate is linked.</div></div></section>`;
+  const errors = issues.filter(i => i.severity === "error").length;
+  return head + `<section class="panel">${panelHead("", "Link check", "", `<span class="small">${errors} to fix · ${issues.length - errors} to check</span>`)}
+    <div class="panel-body"><div class="issues">${issues.map((i, n) => `<div class="issue ${i.severity}">
+      <span class="pill ${i.severity === "error" ? "p-none" : "p-check"}">${i.severity === "error" ? "Fix" : "Check"}</span><span>${esc(i.text)}</span>
+      ${i.fix.confirm ? `<button data-confirm="${n}">Mark as checked</button>` : `<button class="primary" data-fix="${n}">Fix</button>`}</div>`).join("")}</div></div></section>`;
+}
+function wireBronbladen() {
+  document.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => doFix(S.link_check[Number(b.dataset.fix)].fix));
+  document.querySelectorAll("[data-confirm]").forEach(b => b.onclick = () => {
+    if (needName()) return;
+    post("/api/check-confirm", { key: S.link_check[Number(b.dataset.confirm)].key, by: inspector }).catch(() => {});
+  });
+}
 function wireFieldwork() {
+  wirePhotos();
   document.querySelectorAll("[data-fw-tab]").forEach(b => b.onclick = () => {
     fw().tab = b.dataset.fwTab; update({ clear: ["rf-code"] });      // the code field takes the new tab's next code
   });
@@ -712,7 +838,7 @@ function wireFieldwork() {
   if (srcIn && cond) { srcIn.addEventListener("input", syncCondition); syncCondition(); }
   const rs = $("#rf-save"); if (rs) rs.onclick = () => {
     if (needName()) return;
-    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "photo", "drawing", "quantity", "unit", "status", "restriction", "condition"].forEach(k => f[k] = $("#rf-" + k).value);
+    const f = {}; ["code", "source", "deck", "location", "part", "material", "notes", "drawing", "quantity", "unit", "status", "restriction", "condition"].forEach(k => f[k] = $("#rf-" + k).value);
     if (!f.source.trim()) f.condition = "";        // a condition belongs to a source
     const path = editCode ? "/api/sample-update" : "/api/sample";
     const code = (editCode || f.code).trim();
@@ -742,6 +868,12 @@ function wireLab() {
   const up = $("#upload"); if (up) up.onchange = () => uploadPdf(up.files[0]);
   document.querySelectorAll(".prop").forEach(box => {
     const idx = Number(box.dataset.idx), anchor = `.prop[data-idx="${idx}"]`;
+    const cb = box.querySelector("[data-cert]");
+    if (cb) cb.onclick = () => {
+      if (needName()) return;
+      post("/api/certificate", { report_id: currentReport, idx, certificate: $(`#cert-${idx}`).value, by: inspector },
+           { anchor, clear: ["cert-" + idx] }).catch(() => {});
+    };
     const ro = box.querySelector("[data-reopen]");
     if (ro) ro.onclick = () => { reopened.add(idx); update({ anchor }); };
     box.querySelectorAll("[data-act]").forEach(btn => btn.onclick = () => {
@@ -771,12 +903,12 @@ function wireReport() {
 const VIEWS = {
   projects: { view: projectsPage, wire: wireProjects },
   dashboard: { view: dashboardPage, wire: wireDashboard },
-  upload: { view: () => placeholder("Upload", "", `Coming next: one place to upload photos, reports and the intake form. For now, upload a lab report on <a href="${href("lab")}">Lab results</a>.`), wire: () => {} },
+  upload: { view: () => placeholder("Upload", "", `Coming next: one place to upload photos, reports and the intake form. For now, upload photos on <a href="${href("fieldwork")}">Fieldwork</a> and lab reports on <a href="${href("lab")}">Lab results</a>.`), wire: () => {} },
   intake: { view: intakePage, wire: wireIntake },
   "desk-research": { view: () => placeholder("Desk research", "", "Coming later: drawings and documents of the object."), wire: () => {} },
   fieldwork: { view: fieldworkPage, wire: wireFieldwork },
   lab: { view: labPage, wire: wireLab },
-  bronbladen: { view: () => placeholder("Bronbladen", "", "Coming next: one source sheet per source, with photos, sample number, location and certificate number."), wire: () => {} },
+  bronbladen: { view: bronbladenPage, wire: wireBronbladen },
   report: { view: reportPage, wire: wireReport },
 };
 
@@ -873,7 +1005,7 @@ function registration() {
       ${cur.key === "other" ? "" : `<button class="ghost" data-fw-tab="other">Show in Other</button>`}</div>` : "";
   const rows = reg.filter(s => s.group.key === cur.key).map(s => `<tr class="${s.status === "not sampled" ? "ns" : ""}">
       <td class="code" title="${esc(s.group.meaning || "Not in the code list")}">${esc(s.code)}${s.group.unknown ? `<div><span class="pill p-check">unknown code</span></div>` : ""}</td><td>${esc(s.source)}</td><td>${esc(s.deck)}</td><td>${esc(s.location)}</td><td>${esc(s.part)}</td>
-      <td>${esc(s.material)}${s.notes ? `<div class="small">${esc(s.notes)}</div>` : ""}</td><td>${esc(s.photo)}</td><td>${esc(s.drawing)}</td><td>${esc([s.quantity, s.unit].filter(Boolean).join(" "))}</td>
+      <td>${esc(s.material)}${s.notes ? `<div class="small">${esc(s.notes)}</div>` : ""}</td><td>${s.photo ? esc(s.photo) : '<span class="miss">–</span>'}</td><td>${esc(s.drawing)}</td><td>${esc([s.quantity, s.unit].filter(Boolean).join(" "))}</td>
       <td>${s.status === "not sampled" ? `<span class="pill p-demo">not sampled</span><div class="small">${esc(s.restriction)}</div>` : '<span class="small">sampled</span>'}</td>
       <td class="miss small">${s.missing.length ? "Missing: " + s.missing.join(", ") : ""}</td>
       <td><button class="edit-sample ghost" data-code="${esc(s.code)}">Edit</button></td></tr>`).join("");
@@ -900,7 +1032,6 @@ function registration() {
         <label class="field">Part<input id="rf-part" value="${v("part")}" placeholder="Exhaust pipe"></label>
         <label class="field">Material<input id="rf-material" value="${v("material")}" placeholder="Insulation"></label>
         <label class="field">Colour / notes<input id="rf-notes" value="${v("notes")}" placeholder="White, braided"></label>
-        <label class="field">Photo<input id="rf-photo" value="${v("photo")}" placeholder="F-012"></label>
         <label class="field">Drawing position<input id="rf-drawing" value="${v("drawing")}" placeholder="GA-02 pos 4"></label>
         <label class="field">Quantity<input id="rf-quantity" value="${v("quantity")}" placeholder="12" inputmode="decimal"></label>
         <label class="field">Unit<select id="rf-unit">${["", "kg", "m2", "m", "pcs", "l"].map(u => `<option ${ed && ed.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label>
@@ -1024,6 +1155,8 @@ function prop(x, flags) {
     ${finds}
     ${checks}
     ${signed}
+    ${!locked && !x.certificate ? `<div class="act cert"><label class="small" for="cert-${x.idx}">No certificate number on this lab line. Type it from the certificate:</label>
+      <input id="cert-${x.idx}" placeholder="C-4471-07"><button data-cert="1">Save certificate</button></div>` : ""}
     ${!locked && d && !reopened.has(x.idx) ? `<div class="act"><button data-reopen="1" class="ghost">Change decision</button></div>` : ""}
     ${locked || (d && !reopened.has(x.idx)) ? "" : `<div class="act">
       <button class="approve" data-act="approve" ${p.sample ? "" : "disabled"}>Approve${p.sample ? " " + esc(p.sample) : ""}</button>
