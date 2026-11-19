@@ -48,7 +48,8 @@ from app.ihm import (GROUP_LABEL, GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, fin
                      sum_quantities, table_line)
 from ai.james_ai.hybrid import HybridRun, hybrid        # noqa: E402
 from ai.james_ai.linker import Sample                   # noqa: E402
-from james.store import ASSESSMENTS, EDITABLE, OBJECT_FIELDS, PROJECT_INFO, SOURCE_PHOTO_ACTIONS, Store   # noqa: E402
+from james.store import (ASSESSMENTS, DOCUMENT_KINDS, EDITABLE, HM_PRESENT, LOCATION_PARTS, OBJECT_FIELDS,  # noqa: E402
+                         PROJECT_INFO, ROW_TABLES, SOURCE_PHOTO_ACTIONS, Store)
 
 STATIC = Path(__file__).resolve().parent / "static"
 # The condition values of a source, in one place (to confirm with Rolf).
@@ -287,7 +288,18 @@ class Service:
             self.log(rid, "Read again with the current field registration.")
 
     # ---------- projects and field registration ----------
+    @staticmethod
+    def with_site(f: dict, current: Optional[dict] = None) -> dict:
+        """The survey location is kept apart from the vessel, in parts (quay, dock, yard, port, country);
+        `site`, the "Survey Location" of the report, is made from those parts when any is given."""
+        if not any(k in f for k in LOCATION_PARTS):
+            return f
+        merged = {**(current or {}), **{k: f[k] for k in LOCATION_PARTS if k in f}}
+        site = ", ".join(v.strip() for v in (merged.get(k) or "" for k in LOCATION_PARTS) if v.strip())
+        return {**f, "site": site} if site else f
+
     def new_project(self, f: dict) -> int:
+        f = self.with_site(f)
         with self.lock:
             self.object_id = self.store.add_object((f.get("name") or "").strip(), (f.get("kind") or "").strip(),
                                                    (f.get("ref") or "").strip(), (f.get("site") or "").strip(),
@@ -298,8 +310,41 @@ class Service:
     def update_project(self, f: dict, by: str, object_id=None) -> None:
         """Save the intake page: the project details, logged old -> new."""
         with self.lock:
+            oid = self.oid(object_id)
+            f = self.with_site(f, self.store.project_info(oid))
             changes = {k: f[k] for k in (*OBJECT_FIELDS, *PROJECT_INFO) if k in f}
-            self.store.update_object(self.oid(object_id), changes, by)
+            self.store.update_object(oid, changes, by)
+
+    # ---------- desk research: documents with a chosen kind, consultation and desk findings ----------
+    def save_table_row(self, table: str, object_id, f: dict, by: str) -> Optional[int]:
+        with self.lock:
+            oid = self.oid(object_id)
+            if f.get("delete"):
+                self.store.delete_row(table, oid, int(f["id"]), by)
+                return None
+            fields = {k: f[k] for k in ROW_TABLES[table] if k in f}
+            if fields.get("document_id") in ("", None) and "document_id" in fields:
+                fields["document_id"] = None
+            elif fields.get("document_id") and not (fields.get("document") or "").strip():
+                doc = self.store.document(int(fields["document_id"]))
+                if doc is not None and doc["object_id"] == oid:
+                    fields["document"] = doc["original_name"]
+            return self.store.save_row(table, oid, int(f["id"]) if f.get("id") else None, fields, by)
+
+    def upload_document(self, object_id, name: str, data: bytes, kind: str, by: str) -> dict:
+        """Desk research upload: the inspector chooses the kind, so no lab-table guessing."""
+        if kind not in DOCUMENT_KINDS:
+            raise ValueError("choose the kind of document")
+        uploads.mime_of(data)                                  # PDF, PNG or JPG only
+        return self.add_document(object_id, Path(name or "document").name[:200], data, kind, "filed", by)
+
+    def set_document_kind(self, object_id, doc_id: int, kind: str, by: str) -> None:
+        with self.lock:
+            oid = self.oid(object_id)
+            row = self.store.document(int(doc_id))
+            if row is None or row["object_id"] != oid:
+                raise ValueError("unknown document in this project")
+            self.store.update_document(oid, row["id"], kind, "filed" if row["status"] == "ask" else row["status"], by)
 
     def select_object(self, oid: int) -> None:
         with self.lock:
@@ -875,6 +920,18 @@ class Service:
                 self.update_photo(oid, int(pid), {"link": f"source:{no}"}, by)
             return no
 
+    def vessels(self) -> List[dict]:
+        """Vessel details per project, for 'Copy vessel details from survey ...' on the intake page."""
+        out = []
+        for o in self.store.objects():
+            digits = re.sub(r"\D", "", o["ref"] or "")
+            if not digits:
+                continue
+            info = self.store.project_info(o["id"])
+            out.append({"id": o["id"], "project": o["project"], "imo": digits, "name": o["name"], "kind": o["kind"],
+                        **{k: info.get(k, "") for k in ("flag", "year_built", "yard", "owner", "owner_address", "operator")}})
+        return out
+
     # ---------- view for the screen ----------
     def view(self, rid: Optional[int] = None, object_id=None) -> dict:
         """Everything the screen shows for one project. A report of another project is never shown in it."""
@@ -920,6 +977,11 @@ class Service:
                                   "mime": d["mime"], "size": d["size"], "at": d["uploaded_at"], "by": d["uploaded_by"]}
                                  for d in self.store.documents(oid)],
                    "pdf_max_mb": uploads.max_pdf_bytes() // (1024 * 1024),
+                   "document_kinds": list(DOCUMENT_KINDS), "hm_present": list(HM_PRESENT),
+                   "consultation": [dict(r) for r in self.store.table_rows("consultation", oid)],
+                   "desk_findings": [dict(r) for r in self.store.table_rows("desk_finding", oid)],
+                   # earlier surveys of the same vessel (same IMO number): their vessel details can be copied
+                   "vessels": self.vessels(),
                    "link_check": self.link_check(oid),
                    "bronbladen": None,
                    "photo_max_mb": photos.max_photo_bytes() // (1024 * 1024),
@@ -1048,6 +1110,7 @@ class Service:
         signed = self.store.signoff(rid)
         versions = self.store.db.execute("SELECT COUNT(*) n FROM signoff WHERE report_id=?", (rid,)).fetchone()["n"]
         project = [("Project Number", obj["project"]), ("Survey Location", obj["site"]), ("Vessel Name", obj["name"]),
+                   ("IMO Number", obj["ref"] or ""), ("Flag", info.get("flag", "")), ("Year Built", info.get("year_built", "")),
                    ("Vessel Type", obj["kind"]), ("Client", info["client"]), ("Client Address", info["client_address"]),
                    ("Owner", info["owner"]), ("Owner Address", info["owner_address"]), ("Contractor", "James"),
                    ("Survey Period", info["survey_period"] or obj["survey_date"] or ""),
@@ -1121,7 +1184,12 @@ class Service:
             tables[t].append({"line": label, "table": t, "samples": ln["samples"] if ln else [],
                               "quantity": total, "unit": unit, "found": bool(ln)})
         return {"project": project, "sections": list(sections.values()), "part1": part1, "part1_titles": PART_I,
-                "limitations": limitations, "table_a": tables["A"], "table_b": tables["B"], "manual": manual}
+                "limitations": limitations, "table_a": tables["A"], "table_b": tables["B"], "manual": manual,
+                # 2.2 and Appendix C: consultation, desk findings and the desk research documents
+                "consultation": [dict(r) for r in self.store.table_rows("consultation", oid)],
+                "desk_findings": [dict(r) for r in self.store.table_rows("desk_finding", oid)],
+                "documents": [{"name": d["original_name"] or "", "kind": d["kind"]} for d in self.store.documents(oid)
+                              if d["status"] == "filed"]}
 
     def section_sources(self, oid: int, sec: dict, photo_rows) -> List[dict]:
         """One bronblad per source for this 2.3.x section: its record (merged over its samples), only its own
@@ -1375,7 +1443,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"error": f"{name}: {e}"}, 400)
         self.send_json(out)
 
-    def post_file(self) -> None:
+    def post_file(self, chosen_kind: bool = False) -> None:
         """POST /api/file?object=<id>&name=<file name>, the raw file as body: the upload page's drop zone.
         The size limit follows the file name's extension and is checked before reading."""
         q = parse_qs(urlsplit(self.path).query)
@@ -1394,7 +1462,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             by = user or unquote(self.headers.get("X-Inspector", ""))
-            out = SERVICE.upload_file(q.get("object", [None])[0], name, data, by)
+            if chosen_kind:                                  # desk research: the kind comes with the upload
+                out = SERVICE.upload_document(q.get("object", [None])[0], name, data, (q.get("kind") or [""])[0], by)
+            else:
+                out = SERVICE.upload_file(q.get("object", [None])[0], name, data, by)
         except (ValueError, KeyError, TypeError) as e:
             return self.send_json({"error": f"{name}: {e}"}, 400)
         self.send_json(out)
@@ -1420,8 +1491,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlsplit(self.path).path == "/api/photo":
             return self.post_photo()
-        if urlsplit(self.path).path == "/api/file":
-            return self.post_file()
+        if urlsplit(self.path).path in ("/api/file", "/api/document"):
+            return self.post_file(urlsplit(self.path).path == "/api/document")
         length = self.body_length(MAX_JSON_BYTES)
         if length is None:
             return
@@ -1528,6 +1599,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/source-new":
                 extra = {"created": SERVICE.new_source(oid, body.get("group", ""), body.get("samples") or [],
                                                        body.get("photos") or [], body.get("by", ""))}
+                rid = body.get("report_id")
+            elif path in ("/api/consultation", "/api/desk-finding"):
+                table = "consultation" if path == "/api/consultation" else "desk_finding"
+                extra = {"row": SERVICE.save_table_row(table, oid, body, body.get("by", ""))}
+                rid = body.get("report_id")
+            elif path == "/api/document-update":
+                SERVICE.set_document_kind(oid, int(body["id"]), body.get("kind", ""), body.get("by", ""))
                 rid = body.get("report_id")
             elif path == "/api/file-decide":
                 extra = {"message": SERVICE.decide_file(oid, int(body["id"]), body.get("answer", ""), body.get("by", ""))}

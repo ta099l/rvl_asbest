@@ -74,7 +74,7 @@ Taken from a skeleton of one real IHM report (headings and table header rows onl
 - **Front:** project number, a project information table (about 17 fields), technical responsible person.
 - **Summary of identified hazardous materials**, three tables in the IHM Part I layout, each `No. | Name | Location | Materials | Parts where used | Approximate quantity | Remarks`: I-1 paints and coatings, I-2 equipment and machinery, I-3 structure and hull.
 - **1.2 Hazardous materials:** asbestos, PCB, ODS, organotin (TBT), PFOS. Terminology table.
-- **2 Investigation and results:** 2.1 method (consultation table: name and rank), 2.2 desk research, 2.3 visual inspection and sample results:
+- **2 Investigation and results:** 2.1 method, 2.2 results client/manager consultation and desk research (consultation table `Consultation | Name & Rank | Results`; corrected 21 Nov 2026 from an export of the real template, it said 2.1 before), 2.3 visual inspection and sample results:
   - a **sample identification key**: `Sample Code | Description` (about 10 codes) plus additional codes (about 7);
   - per substance (2.3.1 ... 2.3.7, including ODS and radioactive materials) the same three tables:
     1. samples: `Sample No. | Deck Level | Location | Material / Use | Sample Type | Analysis Results`;

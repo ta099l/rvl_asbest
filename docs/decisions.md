@@ -447,3 +447,29 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **Out of scope:** the intake form upload.
 - **Tests:** new `app/test_uploads.py` (13). Browser checks in local headless Chrome, demo data only: 9 of 9.
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-21: Intake in sections and the desk research page, into Project Information, 2.2 and Appendix C (made at Tasnim's request, for Ivan to review)
+
+- **Why:** Rolf's work process: assignment → project → object → survey location (kept apart from the object) → desk research. The template's Project Information, 2.2 and Appendix C come from these.
+- **Intake** (`app/static/index.html`, `james/store.py`):
+  - Sections Assignment, Project, Vessel and Survey location. Fields used in the report are marked "in the report"; the rest is folded under "More".
+  - New fields (contact, reason, scope, planned work, survey type, flag, year built, yard, operator; port, yard/terminal, quay/berth, dock, country, dates) are kept in the existing `info` JSON, so there is no new table (agreed). Older projects get them empty.
+  - **Survey Location** in the report is made from the parts: quay, dock, yard, port, country. The full survey table stays parked (Chunk 7).
+- **New project from intake alone:** "New project" opens the intake page in new mode (`#/new`); the old dialog is gone. One "Create project" saves everything. Name, project number and port or country are needed.
+- **Vessel reuse:** when the IMO number (digits only) matches an earlier project, one click "Copy vessel details from survey J-26-014" fills name, type, flag, year built, yard, owner and operator in the form. Nothing is saved until Save.
+- **Desk research page:**
+  - Documents with a chosen kind. `maintenance_record` was added to the kinds, and the kind can be changed per document.
+  - Desk findings: document, supplier/component, hazardous material present (yes/no/unknown), remark.
+  - Consultation: three fields per row (Consultation, Name & Rank, Results).
+  - Both are new additive tables, saved field by field, with add and remove rows. Every add, change and removal is logged in `register_log` and does not mark lab proposals out of date.
+- **Export** (`app/export_odt.py`), from an export of the real template that Tasnim checked:
+  - **Project Information:** rows **IMO Number**, **Flag** and **Year Built** are added right after Vessel Name, by copying that row (a project-specific table). **To confirm with Rolf** (question 19; Lloyd's requires the IMO number on the cover). Switch: `vessel_rows` in `app/report_options.json`.
+  - **2.2 consultation table** (under "2.2 Results Client/Manager Consultation and Desk Research", header Consultation | Name & Rank | Results): one row per consultation. It is filled **by column position**, because the placeholder names did not come through in the message; a cell without a placeholder keeps its fixed text. No consultation leaves one row of "–".
+  - **2.2 desk findings:** a table Document | Supplier/Component | Hazardous material present | Remark is inserted after "... presented in the following tables.", built from the consultation table's own styling. **To confirm with Rolf** (question 20). Switch: `desk_findings_table`.
+  - **Appendix C:** a list of the desk research documents (name and kind), after the heading. **To confirm with Rolf** (question 21). Switch: `appendix_c_list`.
+  - `docs/context.md` said the consultation table was in 2.1; corrected to 2.2.
+- **Fixed on the way (an older bug):** a value a user typed with angle brackets, such as "Gasket <see drawing>", looked like a template placeholder once escaped (`&lt;see drawing&gt;`). The export's last pass then blanked it to "–". All user text now writes `<` as `&#60;`: the same character in Word and LibreOffice, never a placeholder (test).
+- **Not checked:** the real template (in `context/`). The fixture in `app/test_export.py` has the same parts (a Vessel Name row, the 2.2 heading, table and sentence, an Appendix C heading).
+- **Parked (agreed):** drawing markers on a GA drawing (a separate step), regulatory advice, fieldwork on site.
+- **Tests:** new `app/test_intake.py` (13). Browser checks in local headless Chrome, demo data and the fixture template: 8 of 8.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

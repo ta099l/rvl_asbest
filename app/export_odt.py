@@ -19,7 +19,14 @@ import re
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape as _xml_escape
+
+
+def escape(text: str, entities: Optional[Dict[str, str]] = None) -> str:
+    """Escape a value for content.xml. '<' is written as &#60; (the same character in Word and LibreOffice),
+    so text a user typed, such as '<none>', can never look like a template placeholder (&lt;name&gt;)
+    and be filled or blanked by a later pass."""
+    return _xml_escape(text, entities or {}).replace("&lt;", "&#60;")
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT / "context" / "IHM 26-.odt"
@@ -71,6 +78,7 @@ def build_content(xml: str, report: dict, n_sections: int = 7, pictures: Optiona
     summary = project_summary(report)
     single = {
         "projectnumber": v("Project Number"), "surveylocation": v("Survey Location"), "vesselname": v("Vessel Name"),
+        "imonumber": v("IMO Number"), "flag": v("Flag"), "yearbuilt": v("Year Built"),
         "vessel_name": v("Vessel Name"), "vesseltype": v("Vessel Type"), "clientname": v("Client"),
         "clientaddress": v("Client Address"), "ownername": v("Owner"), "owneraddress": v("Owner Address"),
         "surveyperiod": v("Survey Period"), "surveyor": v("Survey Conducted By"),
@@ -408,6 +416,136 @@ def manifest_with_pictures(manifest: Optional[str], shas: List[str]) -> str:
     return xml.replace("</manifest:manifest>", entries + "</manifest:manifest>", 1)
 
 
+# ---------- intake and desk research: additions to project-specific parts (to confirm with Rolf) ----------
+OPTIONS = Path(__file__).resolve().parent / "report_options.json"
+VESSEL_ROWS = [("IMO Number", "imonumber"), ("Flag", "flag"), ("Year Built", "yearbuilt")]
+DOC_KIND_LABEL = {"ga_drawing": "GA drawing", "previous_ihm": "Previous IHM", "sdoc_md": "SDoC / MD", "sds": "SDS",
+                  "maintenance_record": "Maintenance record", "other": "Other"}
+HM_LABEL = {"yes": "Yes", "no": "No", "unknown": "Unknown"}
+PARA = re.compile(r"<text:p((?: [^>]*)?)/>|<text:p((?: [^>]*)?)>.*?</text:p>", re.S)
+ANY_PLACEHOLDER = re.compile(r"&lt;[a-z_]+&gt;")
+
+
+def report_options() -> Dict[str, bool]:
+    import json
+    try:
+        return json.loads(OPTIONS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def add_vessel_rows(xml: str) -> str:
+    """Project Information has no IMO Number, Flag or Year Built row: copy the Vessel Name row three times,
+    right below it, each with its own label and placeholder (a project-specific table, not fixed text)."""
+    m = next((m for m in ROW.finditer(xml) if re.search(r"&lt;vessel_?name&gt;", m.group(0))
+              and ">Vessel Name<" in m.group(0)), None)
+    if m is None or "&lt;imonumber&gt;" in xml:
+        return xml
+    rows = "".join(re.sub(r"&lt;vessel_?name&gt;", f"&lt;{ph}&gt;", m.group(0)).replace(">Vessel Name<", f">{label}<", 1)
+                   for label, ph in VESSEL_ROWS)
+    return xml[:m.end()] + rows + xml[m.end():]
+
+
+def _cell_text(cell: str, text: str) -> str:
+    """A table cell with one paragraph holding text, keeping the cell's and the first paragraph's style."""
+    p = PARA.search(cell)
+    attrs = (p.group(1) if p.group(1) is not None else p.group(2) or "") if p else ""
+    body = f"<text:p{attrs}>{escape(text)}</text:p>"
+    start = re.match(r"<table:table-cell(?: [^>]*)?>", cell)
+    if start is None:                                   # <table:table-cell .../>: give it content
+        return cell[:-2] + ">" + body + "</table:table-cell>"
+    return start.group(0) + body + "</table:table-cell>"
+
+
+def _section_2_2(xml: str):
+    """(start, end) of 2.2 Results Client/Manager Consultation and Desk Research, up to the next heading."""
+    h = re.search(r"<text:h[^>]*>(?:(?!</text:h>).)*2\.2(?:(?!</text:h>).)*Consultation(?:(?!</text:h>).)*</text:h>", xml, re.S)
+    if not h:
+        return None
+    nxt = re.search(r"<text:h[ >]", xml[h.end():])
+    return h.end(), h.end() + (nxt.start() if nxt else len(xml) - h.end())
+
+
+def _consultation_table(xml: str, span):
+    for m in TABLE.finditer(xml, span[0], span[1]):
+        if "Name &amp; Rank" in m.group(0) or "Name & Rank" in m.group(0):
+            return m
+    return None
+
+
+def fill_consultation(xml: str, rows: List[dict]) -> str:
+    """The 2.2 table (Consultation | Name & Rank | Results), one row per consultation, filled by column
+    position: the placeholder in column 1, 2, 3 gets consultation, name and rank, result."""
+    span = _section_2_2(xml)
+    t = _consultation_table(xml, span) if span else None
+    if t is None:
+        return xml
+    table = t.group(0)
+    trs = list(ROW.finditer(table))
+    tpl = next((r for r in trs if ANY_PLACEHOLDER.search(r.group(0))), trs[1] if len(trs) > 1 else None)
+    if tpl is None:
+        return xml
+    data = [(r.get("consultation") or "", r.get("name_rank") or "", r.get("result") or "") for r in rows] or [(DASH, DASH, DASH)]
+    built = []
+    for values in data:
+        cells, out, pos = list(CELL.finditer(tpl.group(0))), [], 0
+        for i, c in enumerate(cells):
+            cell = c.group(0)
+            if i < len(values):
+                first = ANY_PLACEHOLDER.search(cell)
+                if first:                               # the template's placeholder in this column gets the value
+                    rest = ANY_PLACEHOLDER.sub("", cell[first.end():])
+                    cell = cell[:first.start()] + escape(values[i] or DASH) + rest
+                elif not re.sub(r"<[^>]+>", "", cell).strip():
+                    cell = _cell_text(cell, values[i] or DASH)
+            out.append(tpl.group(0)[pos:c.start()] + cell)
+            pos = c.end()
+        built.append("".join(out) + tpl.group(0)[pos:])
+    table = table[:tpl.start()] + "".join(built) + table[tpl.end():]
+    return xml[:t.start()] + table + xml[t.end():]
+
+
+def insert_desk_table(xml: str, rows: List[dict]) -> str:
+    """After '... presented in the following tables.' in 2.2: a table Document | Supplier/Component |
+    Hazardous material present | Remark, built from the consultation table's own styling."""
+    span = _section_2_2(xml)
+    t = _consultation_table(xml, span) if span else None
+    sentence = re.search(r"<text:p[ >](?:(?!</text:p>).)*presented in the following tables\.(?:(?!</text:p>).)*</text:p>",
+                         xml[span[0]:span[1]], re.S) if span else None
+    if t is None or sentence is None or 'table:name="DeskFindings"' in xml:
+        return xml
+    table = t.group(0)
+    trs = list(ROW.finditer(table))
+    if len(trs) < 2:
+        return xml
+    head_cell = next(CELL.finditer(trs[0].group(0))).group(0)
+    data_cell = next(CELL.finditer(trs[1].group(0))).group(0)
+    open_tag = re.match(r"<table:table [^>]*>", table).group(0)
+    open_tag = re.sub(r'table:name="[^"]*"', 'table:name="DeskFindings"', open_tag)
+    col = re.search(r"<table:table-column [^>]*/>", table)
+    cols = re.sub(r' table:number-columns-repeated="\d+"', "", col.group(0)) * 4 if col else ""
+    row = lambda cell, values: "<table:table-row>" + "".join(_cell_text(cell, v) for v in values) + "</table:table-row>"
+    head = row(head_cell, ["Document", "Supplier/Component", "Hazardous material present", "Remark"])
+    body = "".join(row(data_cell, [r.get("document") or DASH, r.get("supplier_component") or DASH,
+                                   HM_LABEL.get(r.get("hm_present") or "", DASH), r.get("remark") or DASH]) for r in rows) \
+        or row(data_cell, ["No desk research findings recorded", DASH, DASH, DASH])
+    new = open_tag + cols + head + body + "</table:table>"
+    at = span[0] + sentence.end()
+    return xml[:at] + new + xml[at:]
+
+
+def add_appendix_c(xml: str, documents: List[dict]) -> str:
+    """Appendix C: a simple list of the desk research documents (name and kind), after its heading."""
+    h = re.search(r"<text:h[^>]*>(?:(?!</text:h>).)*Appendix C(?:(?!</text:h>).)*</text:h>", xml, re.S)
+    if not h:
+        return xml
+    nxt = re.search(r"<text:p( [^>]*)?>", xml[h.end():])
+    style = nxt.group(1) or "" if nxt else ""
+    lines = [f"{d['name']} – {DOC_KIND_LABEL.get(d['kind'], d['kind'])}" for d in documents] or ["No desk research documents recorded."]
+    paras = "".join(f"<text:p{style}>{escape(t)}</text:p>" for t in lines)
+    return xml[:h.end()] + paras + xml[h.end():]
+
+
 def _codes(codes: List[str], limit: int = 10) -> str:
     return ", ".join(codes[:limit]) + (f" and {len(codes) - limit} more" if len(codes) > limit else "")
 
@@ -549,6 +687,14 @@ def export(report: dict, template: Optional[Path] = None) -> bytes:
             content = add_other_section(content)
             n = 8
         content = ensure_namespaces(content)
+        opts, ihm = report_options(), report["ihm"]
+        if opts.get("vessel_rows", True):
+            content = add_vessel_rows(content)
+        if opts.get("desk_findings_table", True):
+            content = insert_desk_table(content, ihm.get("desk_findings", []))    # before the 2.2 table is filled
+        content = fill_consultation(content, ihm.get("consultation", []))
+        if opts.get("appendix_c_list", True):
+            content = add_appendix_c(content, ihm.get("documents", []))
         pictures: Dict[str, str] = {}
         content = build_content(content, report, n, pictures)
         styles = fill_styles(src.read("styles.xml").decode("utf-8"), report) if "styles.xml" in src.namelist() else None

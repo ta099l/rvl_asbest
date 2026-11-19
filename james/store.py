@@ -26,24 +26,39 @@ _NEW_COLUMNS = {
     "photo": [("proposed_sample", "TEXT"), ("proposed_source", "TEXT"), ("proposal_reason", "TEXT")],
 }
 # Tables added after the first version; on an old file they are created and filled once (see _upgrade).
-_NEW_TABLES = ("source", "photo", "document")
+_NEW_TABLES = ("source", "photo", "document", "consultation", "desk_finding")
 # What an inspector may change on a source (bronblad). The source number itself never changes.
 SOURCE_FIELDS = ("substance_group", "description", "condition", "quantity", "unit", "assessment", "conclusion", "drawing")
 ASSESSMENTS = ("confirmed", "not hazardous", "PCHM", "not accessible")
 # register_log actions about sources, photos, link-check confirmations and certificates typed in by the
 # inspector start with these words. They do not change what the linker reads, so they never mark lab
 # proposals out of date (register_changed_at skips them), and they do not show in the Fieldwork log.
-SOURCE_PHOTO_ACTIONS = ("source ", "photo ", "check ", "lab ", "document ")
-DOCUMENT_KINDS = ("ga_drawing", "previous_ihm", "sdoc_md", "sds", "other")
+SOURCE_PHOTO_ACTIONS = ("source ", "photo ", "check ", "lab ", "document ", "consultation ", "desk ")
+DOCUMENT_KINDS = ("ga_drawing", "previous_ihm", "sdoc_md", "sds", "maintenance_record", "other")
+# Rows of the desk research page: table -> the fields an inspector fills in.
+ROW_TABLES = {"consultation": ("consultation", "name_rank", "result"),
+              "desk_finding": ("document_id", "document", "supplier_component", "hm_present", "remark")}
+HM_PRESENT = ("yes", "no", "unknown")
 DOCUMENT_STATUS = ("filed", "ask", "unreadable_lab")
 PHOTO_EDITABLE = ("photo_no", "description", "sample_code", "source_no")
 # Fields an inspector may change after registering a sample. The code itself never changes:
 # lab results and decisions hang on it.
 EDITABLE = ("source", "location", "part", "material", "notes", "photo", "deck", "status", "restriction", "drawing",
             "quantity", "unit")
-# Project Information fields of the RVL IHM template, besides name, type, location, project number and date.
+# Intake fields kept in the object's info JSON (besides name, type, IMO, location, project number and date,
+# which are columns). Old files simply lack the new keys: project_info() fills them in empty.
 PROJECT_INFO = ("client", "client_address", "owner", "owner_address", "surveyor", "technical_responsible",
-                "project_coordinator", "survey_period")
+                "project_coordinator", "survey_period",
+                # assignment
+                "contact", "reason", "scope", "planned_work",
+                # project
+                "survey_type",
+                # vessel (IMO number is the object's ref column)
+                "flag", "year_built", "yard", "operator",
+                # survey location, kept apart from the vessel (Rolf's work process); `site` is made from these
+                "loc_port", "loc_yard", "loc_quay", "loc_dock", "loc_country", "loc_dates")
+# The parts of the survey location, in the order they are written in "Survey Location".
+LOCATION_PARTS = ("loc_quay", "loc_dock", "loc_yard", "loc_port", "loc_country")
 # Columns of the object table that the intake page may change.
 OBJECT_FIELDS = ("name", "kind", "ref", "site", "project", "survey_date")
 # register_log code for a change to the project details (not a sample, so no report goes out of date).
@@ -398,6 +413,62 @@ class Store:
             else:
                 self.db.execute("DELETE FROM photo WHERE id=?", (photo_id,))
             self._log_register(object_id, row["photo_no"], "photo moved", why, by)
+
+    # ---------- desk research rows: consultation (2.2) and desk findings ----------
+    def table_rows(self, table: str, object_id: int) -> List[sqlite3.Row]:
+        if table not in ROW_TABLES:
+            raise ValueError("unknown table")
+        return self.db.execute(f"SELECT * FROM {table} WHERE object_id=? ORDER BY sort_order, id", (object_id,)).fetchall()
+
+    def save_row(self, table: str, object_id: int, row_id: Optional[int], fields: Dict[str, object], by: str) -> int:
+        """Add a row (row_id None) or change one; logged old -> new. Only the listed fields can be set."""
+        if table not in ROW_TABLES:
+            raise ValueError("unknown table")
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        allowed = ROW_TABLES[table]
+        bad = set(fields) - set(allowed)
+        if bad:
+            raise ValueError("these fields cannot be changed: " + ", ".join(sorted(bad)))
+        new = {k: (v.strip() if isinstance(v, str) else v) or None for k, v in fields.items()}
+        if new.get("hm_present") and new["hm_present"] not in HM_PRESENT:
+            raise ValueError("hazardous material present must be yes, no or unknown")
+        if new.get("document_id"):
+            doc = self.document(int(new["document_id"]))
+            if doc is None or doc["object_id"] != object_id:
+                raise ValueError("unknown document in this project")
+        label = "consultation" if table == "consultation" else "desk finding"
+        with self.db:
+            if row_id is None:
+                n = self.db.execute(f"SELECT COALESCE(MAX(sort_order), 0) FROM {table} WHERE object_id=?", (object_id,)).fetchone()[0]
+                cols = ["object_id", *new, "sort_order", "updated_by", "updated_at"]
+                cur = self.db.execute(f"INSERT INTO {table}({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                                      [object_id, *new.values(), n + 1, by.strip(), _now()])
+                self._log_register(object_id, label, f"{label} added", "; ".join(f"{k}: {v}" for k, v in new.items() if v) or "empty row", by)
+                return cur.lastrowid
+            row = self.db.execute(f"SELECT * FROM {table} WHERE id=?", (row_id,)).fetchone()
+            if row is None or row["object_id"] != object_id:
+                raise ValueError("unknown row in this project")
+            diffs = [f"{k}: {row[k] or '–'} -> {v or '–'}" for k, v in new.items() if (row[k] or None) != v]
+            if diffs:
+                self.db.execute(f"UPDATE {table} SET " + ", ".join(f"{k}=?" for k in new) + ", updated_by=?, updated_at=? WHERE id=?",
+                                [*new.values(), by.strip(), _now(), row_id])
+                self._log_register(object_id, label, f"{label} changed", "; ".join(diffs), by)
+            return row_id
+
+    def delete_row(self, table: str, object_id: int, row_id: int, by: str) -> None:
+        if table not in ROW_TABLES:
+            raise ValueError("unknown table")
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        row = self.db.execute(f"SELECT * FROM {table} WHERE id=?", (row_id,)).fetchone()
+        if row is None or row["object_id"] != object_id:
+            raise ValueError("unknown row in this project")
+        label = "consultation" if table == "consultation" else "desk finding"
+        with self.db:
+            self.db.execute(f"DELETE FROM {table} WHERE id=?", (row_id,))
+            self._log_register(object_id, label, f"{label} removed",
+                               "; ".join(f"{k}: {row[k]}" for k in ROW_TABLES[table] if row[k]) or "empty row", by)
 
     def lab_report_by_sha(self, object_id: int, sha: str) -> Optional[sqlite3.Row]:
         return self.db.execute("SELECT * FROM lab_report WHERE object_id=? AND source_sha256=?", (object_id, sha)).fetchone()

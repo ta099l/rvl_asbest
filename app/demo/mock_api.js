@@ -9,7 +9,14 @@
   const APP_ONLY = "This needs the James app on a laptop (start_james.bat): the linker and the Word export run in Python. This demo page shows the flow with the demo ship.";
   const EDITABLE = ["source", "location", "part", "material", "notes", "photo", "deck", "status", "restriction", "drawing", "quantity", "unit"];
   const CONDITIONS = ["Good", "Damaged", "Weathered", "Unknown"];     // keep in step with app/conditions.json
-  const INFO = ["client", "client_address", "owner", "owner_address", "surveyor", "technical_responsible", "project_coordinator", "survey_period"];
+  // keep in step with james/store.py PROJECT_INFO and LOCATION_PARTS
+  const INFO = ["client", "client_address", "owner", "owner_address", "surveyor", "technical_responsible", "project_coordinator", "survey_period",
+                "contact", "reason", "scope", "planned_work", "survey_type", "flag", "year_built", "yard", "operator",
+                "loc_port", "loc_yard", "loc_quay", "loc_dock", "loc_country", "loc_dates"];
+  const LOCATION_PARTS = ["loc_quay", "loc_dock", "loc_yard", "loc_port", "loc_country"];
+  const withSite = (b, cur) => { if (!LOCATION_PARTS.some(k => k in b)) return b;
+    const m = { ...(cur || {}), ...b }, site = LOCATION_PARTS.map(k => (m[k] || "").trim()).filter(Boolean).join(", ");
+    return site ? { ...b, site } : b; };
   window.confirm = () => true;              // the demo viewer has no dialogs; resetting a demo is harmless
 
   const pad = n => String(n).padStart(2, "0");
@@ -223,7 +230,7 @@
       conditions: CONDITIONS,
       photos: [], sources: [...new Set(o.register.map(s => s.source).filter(Boolean))].sort(), photo_max_mb: 15,
       link_check: null,                       // the link check runs in the Python app only
-      documents: [], pdf_max_mb: 20,
+      documents: [], pdf_max_mb: 20, consultation: [], desk_findings: [], vessels: [],
       register: o.register.map(s => ({ ...s, group: groupForCode(s.code), condition: ((o.sources || {})[s.source] || ""), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
       register_log: o.log, reports: reports.map(x => ({ id: x.id, label: x.label, report_ref: x.ref, lab: x.lab, ingested_at: x.ingested_at, practice: !!x.seeded })),
       report: r ? reportView(r) : null, asset: assetView(o), thresholds_note: "Thresholds: to confirm by RVL (app/thresholds.json)." };
@@ -317,6 +324,7 @@
   const OBJECT_FIELDS = ["name", "kind", "ref", "site", "project", "survey_date"];
   function updateProject(b) {                 // the intake page, as Service.update_project
     const by = (b.by || "").trim(); if (!by) fail("a named inspector is required");
+    b = withSite(b, obj().info);
     const o = obj(), old = { ...Object.fromEntries(OBJECT_FIELDS.map(k => [k, o[k] || ""])), ...o.info };
     const neu = { ...old }; [...OBJECT_FIELDS, ...INFO].forEach(k => { if (k in b) neu[k] = (b[k] || "").trim(); });
     if (!neu.name || !neu.project || !neu.site) fail("a project needs a name, a project number and a survey location");
@@ -326,6 +334,7 @@
     o.log.push({ at: now(), by, code: "(project)", action: "changed", detail: diffs.join("; ") });
   }
   function newProject(b) {
+    b = withSite(b);
     if (!(b.name || "").trim() || !(b.project || "").trim() || !(b.site || "").trim()) fail("a project needs a name, a project number and a survey location");
     addObject({ name: b.name.trim(), kind: b.kind, ref: b.ref, site: b.site.trim(), project: b.project.trim(), survey_date: b.survey_date }, [], b);
   }
@@ -337,6 +346,7 @@
     "/api/report": () => fail(APP_ONLY), "/api/upload-pdf": () => fail(APP_ONLY),
     "/api/photo": () => fail(APP_ONLY), "/api/photo-update": () => fail(APP_ONLY), "/api/photo-accept": () => fail(APP_ONLY),
     "/api/certificate": () => fail(APP_ONLY), "/api/check-confirm": () => fail(APP_ONLY),
+    "/api/consultation": () => fail(APP_ONLY), "/api/desk-finding": () => fail(APP_ONLY), "/api/document-update": () => fail(APP_ONLY),
     "/api/file": () => fail(APP_ONLY), "/api/file-decide": () => fail(APP_ONLY), "/api/file-move": () => fail(APP_ONLY),
     "/api/reread": b => { const r = report(b.report_id); if (r.signed) fail("this report is signed; its proposals can no longer change");
                           r.readRev = st.objects.find(o => o.id === r.object).regRev;

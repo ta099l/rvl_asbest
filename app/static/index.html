@@ -302,6 +302,13 @@
   details.fold > summary { padding: var(--s-4) var(--s-5); cursor: pointer; font-weight: 600; }
   details.fold[open] > summary { padding-bottom: var(--s-3); }
   .btn-link { font-size: var(--fs-sm); font-weight: 500; }
+  .intake-section + .intake-section { margin-top: var(--s-5); padding-top: var(--s-4); border-top: 1px solid var(--border); }
+  .intake-section h3 { margin: 0 0 var(--s-3); }
+  details.more { margin-top: var(--s-3); }
+  details.more > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--text-2); }
+  details.more .form-grid { margin-top: var(--s-3); }
+  .imo-copy:not(:empty) { margin-top: var(--s-3); }
+  .edit-table input, .edit-table select { width: 100%; min-width: 120px; }
   .dropzone { display: grid; justify-items: center; gap: var(--s-2); padding: var(--s-6) var(--s-4); border: 2px dashed var(--border-strong);
               border-radius: var(--r-md); text-align: center; background: var(--surface-2); }
   .dropzone.over { border-color: var(--brand); background: var(--brand-soft); }
@@ -384,35 +391,6 @@
 <div class="progress" aria-hidden="true"></div>
 <div id="app"><div class="boot" role="status">Loading project…</div></div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
-
-<dialog id="newproj" aria-labelledby="np-title">
-  <div class="dialog-head">
-    <h2 id="np-title">New project</h2>
-    <p>One object (ship or structure) and one survey. Fictitious data only.</p>
-  </div>
-  <div class="dialog-body">
-    <div class="form-grid">
-      <label class="field span-2">Object name <span class="req">required</span><input id="np-name" placeholder="MV Example"></label>
-      <label class="field">RVL project number <span class="req">required</span><input id="np-project" placeholder="J-26-014"></label>
-      <label class="field">Survey location <span class="req">required</span><input id="np-site" placeholder="Shipyard, Rotterdam"></label>
-      <label class="field">Object code / IMO number<input id="np-ref" placeholder="IMO 9000000"></label>
-      <label class="field">Type<input id="np-kind" placeholder="Bulk carrier · MT"></label>
-      <label class="field">Survey date<input id="np-date" placeholder="12 Nov 2026"></label>
-      <label class="field">Survey period<input id="np-survey_period" placeholder="12–13 Nov 2026"></label>
-      <div class="form-section">Client and owner</div>
-      <label class="field">Client<input id="np-client" placeholder="Client name"></label>
-      <label class="field">Client address<input id="np-client_address"></label>
-      <label class="field">Owner<input id="np-owner" placeholder="Owner name"></label>
-      <label class="field">Owner address<input id="np-owner_address"></label>
-      <div class="form-section">People</div>
-      <label class="field">Survey conducted by<input id="np-surveyor"></label>
-      <label class="field">Technical Responsible Person<input id="np-technical_responsible"></label>
-      <label class="field">Project coordinator<input id="np-project_coordinator"></label>
-    </div>
-  </div>
-  <div class="dialog-foot"><button id="np-cancel">Cancel</button><button class="primary" id="np-ok">Create project</button></div>
-</dialog>
-
 <dialog id="paste" aria-labelledby="paste-title">
   <div class="dialog-head">
     <h2 id="paste-title">Paste a lab report</h2>
@@ -473,6 +451,7 @@ let loadSeq = 0;                             // only the newest page load may dr
 function parseRoute(hash) {
   const p = (hash || "").replace(/^#\/?/, "").split("/").filter(Boolean);
   if (p.length === 1 && p[0] === "projects") return { page: "projects", oid: null, rid: null };
+  if (p.length === 1 && p[0] === "new") return { page: "new", oid: null, rid: null };
   if (p[0] !== "p" || !/^\d+$/.test(p[1] || "") || !PAGES.some(([id]) => id === p[2])) return null;
   if (p.length === 3) return { page: p[2], oid: +p[1], rid: null };
   if (p.length === 4 && WITH_REPORT.includes(p[2]) && /^\d+$/.test(p[3])) return { page: p[2], oid: +p[1], rid: +p[3] };
@@ -634,7 +613,7 @@ function topbar() {
 }
 function wireTop() {
   const op = $("#objpick"); if (op) op.onchange = () => go(op.value ? href("dashboard", +op.value) : "#/projects");
-  const np = $("#new-project"); if (np) np.onclick = () => $("#newproj").showModal();
+  const np = $("#new-project"); if (np) np.onclick = () => go("#/new");
   const inp = $("#inspector");
   if (inp) inp.addEventListener("input", () => { inspector = inp.value; inp.classList.toggle("need", !inspector.trim()); });
   const lo = $("#logout"); if (lo) lo.onclick = logout;
@@ -664,22 +643,35 @@ function projectsPage() {
       ? `<div class="table-frame tscroll"><table><thead><tr><th>Project number</th><th>Object</th><th><span class="sr-only">Open</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : `<div class="empty">No projects yet. Start with "New project".</div>`}</div></section>`;
 }
-function wireProjects() { const b = $("#new-project-2"); if (b) b.onclick = () => $("#newproj").showModal(); }
+function wireProjects() { const b = $("#new-project-2"); if (b) b.onclick = () => go("#/new"); }
 
-const INTAKE = [["name", "Object name", true], ["project", "RVL project number", true], ["site", "Survey location", true],
-  ["ref", "Object code / IMO number"], ["kind", "Type"], ["survey_date", "Survey date"], ["survey_period", "Survey period"],
-  ["client", "Client"], ["client_address", "Client address"], ["owner", "Owner"], ["owner_address", "Owner address"],
-  ["surveyor", "Survey conducted by"], ["technical_responsible", "Technical Responsible Person"], ["project_coordinator", "Project coordinator"]];
-const intakeValue = (k) => { const o = S.object; return (k in o && k !== "info" ? o[k] : (o.info || {})[k]) || ""; };
+// Intake in the order of Rolf's work: Assignment, Project, Vessel, Survey location (kept apart from the vessel).
+// [key, label, required]: required = used in the report. The rest is folded under "More".
+const INTAKE_SECTIONS = [
+  ["Assignment", [["client", "Client", true], ["client_address", "Client address", true]],
+   [["contact", "Contact person"], ["reason", "Reason for the survey"], ["scope", "Scope"], ["planned_work", "Planned work (recycling, refit, ...)"]]],
+  ["Project", [["project", "RVL project number", true], ["survey_period", "Survey period", true], ["surveyor", "Survey conducted by", true],
+               ["technical_responsible", "Technical Responsible Person", true], ["project_coordinator", "Project coordinator", true]],
+   [["survey_type", "Survey type (IHM Part I, asbestos, ...)"], ["survey_date", "Survey date"]]],
+  ["Vessel", [["name", "Vessel name", true], ["ref", "IMO number", true], ["kind", "Vessel type", true], ["flag", "Flag", true],
+              ["year_built", "Year built", true], ["owner", "Owner", true], ["owner_address", "Owner address", true]],
+   [["yard", "Yard (built)"], ["operator", "Operator"]]],
+  ["Survey location", [["loc_port", "Port", true], ["loc_country", "Country", true]],
+   [["loc_yard", "Yard / terminal"], ["loc_quay", "Quay / berth"], ["loc_dock", "Dock"], ["loc_dates", "Dates at this location"]]],
+];
+const INTAKE = INTAKE_SECTIONS.flatMap(([, req, more]) => [...req, ...more]);
+const INTAKE_REQUIRED = INTAKE.filter(f => f[2]);
+const VESSEL_COPY = ["name", "kind", "flag", "year_built", "yard", "owner", "owner_address", "operator"];
+const intakeValue = (k) => { if (route.page === "new") return ""; const o = S.object; return (k in o && k !== "info" ? o[k] : (o.info || {})[k]) || ""; };
 const PROJECT_LOG = "(project)";
 
 function dashboardPage() {
   const o = S.object, r = S.report, reg = S.register, n = S.open_lines || 0;
-  const filled = INTAKE.filter(([k]) => intakeValue(k)).length, gaps = reg.filter(s => s.missing.length).length;
+  const filled = INTAKE_REQUIRED.filter(([k]) => intakeValue(k)).length, gaps = reg.filter(s => s.missing.length).length;
   const unknownCodes = reg.filter(s => s.group && s.group.unknown).length;
   const cards = [
     ["upload", "Drop all files", "Lab reports, photos and drawings of the survey in one go; James sorts and reads them.", "todo"],
-    ["intake", `${filled} of ${INTAKE.length} fields filled`, "Project details for the title page of the report.", filled === INTAKE.length ? "done" : "open"],
+    ["intake", `${filled} of ${INTAKE_REQUIRED.length} report fields filled`, "Assignment, project, vessel and survey location.", filled === INTAKE_REQUIRED.length ? "done" : "open"],
     ["desk-research", "Not built yet", "Drawings and documents of the object.", "todo"],
     ["fieldwork", `${reg.length} sample${reg.length === 1 ? "" : "s"} registered`, !reg.length ? "Register the samples from site"
       : [unknownCodes ? `${unknownCodes} with an unknown code` : "", gaps ? `${gaps} with missing fields` : "No missing fields"].filter(Boolean).join(" · "),
@@ -716,28 +708,46 @@ function wireDashboard() {
   const sh = $("#save-history"); if (sh) sh.onclick = () => { if (needName()) return; post("/api/save-history", { report_id: currentReport, by: inspector }).catch(() => {}); };
 }
 
-function intakePage() {
-  const field = ([k, label, req]) => `<label class="field">${label}${req ? ' <span class="req">required</span>' : ""}<input id="in-${k}" value="${esc(intakeValue(k))}"></label>`;
-  const log = S.register_log.filter(e => e.code === PROJECT_LOG).slice(-5).reverse()
+function intakePage(isNew) {
+  const field = ([k, label, req]) => `<label class="field">${esc(label)}${req ? ' <span class="req">in the report</span>' : ""}<input id="in-${k}" value="${esc(intakeValue(k))}"></label>`;
+  const log = isNew ? "" : S.register_log.filter(e => e.code === PROJECT_LOG).slice(-5).reverse()
     .map(e => `<div><time>${localTime(e.at)}</time><b>${esc(e.by)}</b><span>${esc(e.detail)}</span></div>`).join("");
-  return pageHead("Intake", "The project details on the title page of the IHM report. Every change is signed and logged.") +
-    `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">
-      <div class="form-grid">${INTAKE.slice(0, 7).map(field).join("")}
-        <div class="form-section">Client and owner</div>${INTAKE.slice(7, 11).map(field).join("")}
-        <div class="form-section">People</div>${INTAKE.slice(11).map(field).join("")}</div>
-      <div class="actions" style="margin-top:16px"><button class="primary" id="in-save">Save intake</button></div>
+  const site = isNew ? "" : S.object.site, parts = INTAKE_SECTIONS[3][1].concat(INTAKE_SECTIONS[3][2]).some(([k]) => intakeValue(k));
+  const sections = INTAKE_SECTIONS.map(([title, req, more]) => `<div class="intake-section"><h3>${esc(title)}</h3>
+      ${title === "Survey location" && site && !parts ? `<p class="small">Survey location now: <b>${esc(site)}</b>. Fill in the parts to replace it.</p>` : ""}
+      <div class="form-grid">${req.map(field).join("")}</div>
+      ${title === "Vessel" ? `<div id="imo-copy" class="imo-copy"></div>` : ""}
+      <details class="more"><summary>More</summary><div class="form-grid">${more.map(field).join("")}</div></details></div>`).join("");
+  return (isNew ? `<div class="page-head"><div><div class="crumb">James</div><h1>New project</h1>
+        <p class="panel-desc">Fill in the assignment, project, vessel and survey location. Vessel name, RVL project number and the port or country are needed to save.</p></div></div>`
+      : pageHead("Intake", "The project details for the title page of the IHM report. Every change is signed and logged."))
+    + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">${sections}
+      <div class="actions" style="margin-top:16px"><button class="primary" id="in-save">${isNew ? "Create project" : "Save intake"}</button></div>
       ${log ? `<div class="log" style="margin-top:20px"><span class="log-title">Latest changes to the project details</span>${log}</div>` : ""}
     </div></section>`;
 }
-function wireIntake() {
+function wireIntake(isNew) {
+  const imo = $("#in-ref"), box = $("#imo-copy");
+  const showCopy = () => {                          // the same IMO number in an earlier survey: copy its vessel details
+    if (!imo || !box) return;
+    const digits = imo.value.replace(/\D/g, "");
+    const match = (S.vessels || []).filter(v => v.imo === digits && v.id !== route.oid).sort((a, b) => b.id - a.id)[0];
+    box.innerHTML = digits.length >= 7 && match ? `<button id="imo-copy-btn" data-from="${match.id}">Copy vessel details from survey ${esc(match.project)}</button>` : "";
+    const btn = $("#imo-copy-btn");
+    if (btn) btn.onclick = () => {
+      VESSEL_COPY.forEach(k => { const el = $("#in-" + k); if (el && match[k]) el.value = match[k]; });
+      toast(`Vessel details copied from survey ${match.project}. Check them, then ${isNew ? "create the project" : "save"}.`);
+    };
+  };
+  if (imo) { imo.addEventListener("input", showCopy); showCopy(); }
   const b = $("#in-save"); if (!b) return;
   b.onclick = () => {
+    const f = {}; INTAKE.forEach(([k]) => f[k] = $("#in-" + k).value);
+    if (isNew) { post("/api/project", f, { to: "intake" }).then(() => toast("Project created.")).catch(() => {}); return; }
     if (needName()) return;
-    const f = { by: inspector }; INTAKE.forEach(([k]) => f[k] = $("#in-" + k).value);
-    post("/api/project-update", f, { clear: ["in-"], top: true }).then(() => toast("Intake saved.")).catch(() => {});
+    post("/api/project-update", { ...f, by: inspector }, { clear: ["in-"], top: true }).then(() => toast("Intake saved.")).catch(() => {});
   };
 }
-
 function fieldworkPage() { return pageHead("Fieldwork", "Sources and samples as recorded on site.") + registration() + photosPanel(); }
 
 // ---------- Photos: upload a batch, check the proposed links, fix them ----------
@@ -917,18 +927,74 @@ function wireUpload() {
     } }).catch(() => {});
   });
 }
-const DOC_KIND = { ga_drawing: "Drawing (GA)", previous_ihm: "Previous IHM", sdoc_md: "SDoC / MD", sds: "SDS", other: "Other" };
+const DOC_KIND = { ga_drawing: "GA drawing", previous_ihm: "Previous IHM", sdoc_md: "SDoC / MD", sds: "SDS",
+                   maintenance_record: "Maintenance record", other: "Other" };
+const HM_LABEL = { yes: "Yes", no: "No", unknown: "Unknown" };
 function deskResearchPage() {
-  const docs = S.documents || [];
+  const docs = S.documents || [], kinds = S.document_kinds || Object.keys(DOC_KIND);
   const status = (d) => d.status === "ask" ? '<span class="pill p-check">lab report or drawing?</span>'
     : d.status === "unreadable_lab" ? '<span class="pill p-check">lab report, not readable: paste its lines</span>' : "";
-  return pageHead("Desk research", "Drawings and documents of the object. Drop them on the Upload tab.")
-    + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">${docs.length ? `<div class="table-frame tscroll"><table><thead><tr><th>Document</th><th>Kind</th><th>Size</th><th>Added</th><th><span class="sr-only">Status</span></th></tr></thead><tbody>
-      ${docs.map(d => `<tr><td><a href="/api/document/${d.id}?object=${route.oid}" target="_blank" rel="noopener">${esc(d.name)}</a></td><td>${esc(DOC_KIND[d.kind] || d.kind)}</td>
-        <td>${Math.max(1, Math.round((d.size || 0) / 1024))} kB</td><td>${esc(d.by || "")}</td><td>${status(d)}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="empty">No drawings or documents yet. Drop them on <a href="${href("upload")}">Upload</a>.</div>`}</div></section>`;
+  const kindSel = (d) => `<label class="sr-only" for="dk-${d.id}">Kind</label><select id="dk-${d.id}" data-doc-kind="${d.id}">${kinds.map(k => `<option value="${k}" ${k === d.kind ? "selected" : ""}>${esc(DOC_KIND[k] || k)}</option>`).join("")}</select>`;
+  const inp = (t, r, k, ph) => `<input data-row="${t}" data-id="${r.id}" data-field="${k}" value="${esc(r[k] || "")}" placeholder="${esc(ph || "")}" aria-label="${esc(ph || k)}">`;
+  const del = (t, r) => `<button class="ghost" data-del="${t}" data-id="${r.id}" aria-label="Remove row">Remove</button>`;
+  const findings = (S.desk_findings || []).map(r => `<tr><td>${inp("desk-finding", r, "document", "Document")}</td>
+      <td>${inp("desk-finding", r, "supplier_component", "Supplier / component")}</td>
+      <td><select data-row="desk-finding" data-id="${r.id}" data-field="hm_present" aria-label="Hazardous material present"><option value=""></option>${(S.hm_present || ["yes", "no", "unknown"]).map(v => `<option value="${v}" ${r.hm_present === v ? "selected" : ""}>${HM_LABEL[v]}</option>`).join("")}</select></td>
+      <td>${inp("desk-finding", r, "remark", "Remark")}</td><td>${del("desk-finding", r)}</td></tr>`).join("");
+  const consult = (S.consultation || []).map(r => `<tr><td>${inp("consultation", r, "consultation", "e.g. Interview on board")}</td>
+      <td>${inp("consultation", r, "name_rank", "e.g. J. Example, Chief Engineer")}</td><td>${inp("consultation", r, "result", "Result")}</td><td>${del("consultation", r)}</td></tr>`).join("");
+  return pageHead("Desk research", "Documents of the object, what they say about hazardous materials, and who was consulted. Section 2.2 and Appendix C of the report.")
+    + `<section class="panel">${panelHead("", "Documents", "GA drawings, previous IHMs, SDoC/MD, SDS and maintenance records. Choose the kind, then the files.")}
+      <div class="panel-body">
+        <div class="actions"><label class="field" style="min-width:200px">Kind<select id="dr-kind">${kinds.map(k => `<option value="${k}">${esc(DOC_KIND[k] || k)}</option>`).join("")}</select></label>
+          <label class="filebtn">Add documents<input type="file" id="dr-files" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"></label></div>
+        ${docs.length ? `<div class="table-frame tscroll" style="margin-top:12px"><table><thead><tr><th>Document</th><th>Kind</th><th>Size</th><th>Added by</th><th><span class="sr-only">Status</span></th></tr></thead><tbody>
+          ${docs.map(d => `<tr><td><a href="/api/document/${d.id}?object=${route.oid}" target="_blank" rel="noopener">${esc(d.name)}</a></td><td>${kindSel(d)}</td>
+            <td>${Math.max(1, Math.round((d.size || 0) / 1024))} kB</td><td>${esc(d.by || "")}</td><td>${status(d)}</td></tr>`).join("")}</tbody></table></div>`
+          : `<div class="empty" style="margin-top:12px">No documents yet.</div>`}
+      </div></section>
+    <section class="panel">${panelHead("", "Desk research findings", "Per document: which supplier or component, and whether it says a hazardous material is present. Goes into 2.2 (to confirm with Rolf).")}
+      <div class="panel-body">${findings ? `<div class="table-frame tscroll"><table class="edit-table"><thead><tr><th>Document</th><th>Supplier / Component</th><th>Hazardous material present</th><th>Remark</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody>${findings}</tbody></table></div>` : `<div class="empty">No findings yet.</div>`}
+        <datalist id="doc-names">${docs.map(d => `<option value="${esc(d.name)}">`).join("")}</datalist>
+        <div class="actions" style="margin-top:12px"><button data-add="desk-finding">Add finding</button></div></div></section>
+    <section class="panel">${panelHead("", "Consultation", "Who was consulted (owner, crew, superintendent) and what they said. Goes into the 2.2 table: Consultation | Name & Rank | Results.")}
+      <div class="panel-body">${consult ? `<div class="table-frame tscroll"><table class="edit-table"><thead><tr><th>Consultation</th><th>Name &amp; Rank</th><th>Results</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody>${consult}</tbody></table></div>` : `<div class="empty">No consultations yet.</div>`}
+        <div class="actions" style="margin-top:12px"><button data-add="consultation">Add consultation</button></div></div></section>`;
 }
-function wireDeskResearch() {}
+function wireDeskResearch() {
+  document.querySelectorAll('[data-row="desk-finding"][data-field="document"]').forEach(el => el.setAttribute("list", "doc-names"));
+  document.querySelectorAll("[data-row]").forEach(el => el.onchange = () => {           // autosave, field by field
+    if (needName()) return;
+    post(`/api/${el.dataset.row}`, { id: Number(el.dataset.id), [el.dataset.field]: el.value, by: inspector }).catch(() => {});
+  });
+  document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => {
+    if (needName()) return;
+    post(`/api/${b.dataset.add}`, { by: inspector }).catch(() => {});
+  });
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    if (needName()) return;
+    post(`/api/${b.dataset.del}`, { id: Number(b.dataset.id), delete: true, by: inspector }).catch(() => {});
+  });
+  document.querySelectorAll("[data-doc-kind]").forEach(el => el.onchange = () => {
+    if (needName()) return;
+    post("/api/document-update", { id: Number(el.dataset.docKind), kind: el.value, by: inspector }).catch(() => {});
+  });
+  const files = $("#dr-files"); if (files) files.onchange = async () => {
+    if (needName()) return;
+    const kind = $("#dr-kind").value, oid = route.oid, msgs = [];
+    pending++; document.documentElement.classList.add("is-busy");
+    try {
+      for (const f of files.files) {
+        const res = await fetch(`/api/document?object=${oid}&name=${encodeURIComponent(f.name)}&kind=${kind}`, { method: "POST", body: f,
+          headers: { "Content-Type": "application/octet-stream", "X-Inspector": encodeURIComponent(inspector) } });
+        const d = await res.json().catch(() => ({ error: `${f.name}: refused (${res.status})` }));
+        msgs.push(res.ok ? d.message : d.error);
+      }
+    } finally { if (--pending === 0) document.documentElement.classList.remove("is-busy"); }
+    msgs.forEach(m => toast(m));
+    await refresh();
+  };
+}
 
 // ---------- Bronbladen: the link check, one line per broken link, each with its fix ----------
 let pendingFix = null;                        // where to scroll after a Fix button changed page
@@ -1178,7 +1244,8 @@ const VIEWS = {
   projects: { view: projectsPage, wire: wireProjects },
   dashboard: { view: dashboardPage, wire: wireDashboard },
   upload: { view: uploadPage, wire: wireUpload },
-  intake: { view: intakePage, wire: wireIntake },
+  intake: { view: () => intakePage(false), wire: () => wireIntake(false) },
+  new: { view: () => intakePage(true), wire: () => wireIntake(true) },
   "desk-research": { view: deskResearchPage, wire: wireDeskResearch },
   fieldwork: { view: fieldworkPage, wire: wireFieldwork },
   lab: { view: labPage, wire: wireLab },
@@ -1473,13 +1540,6 @@ function needName() {
   const i = $("#inspector"); if (i) i.focus();
   return true;
 }
-$("#np-cancel").onclick = () => $("#newproj").close();
-$("#np-ok").onclick = async () => {
-  const f = { survey_date: $("#np-date").value };
-  ["name", "ref", "kind", "site", "project", "survey_period", "client", "client_address", "owner", "owner_address",
-   "surveyor", "technical_responsible", "project_coordinator"].forEach(k => f[k] = $("#np-" + k).value);
-  try { await post("/api/project", f, { to: "dashboard" }); $("#newproj").close(); } catch (e) {}
-};
 $("#paste-cancel").onclick = () => $("#paste").close();
 $("#paste-ok").onclick = async () => {
   try { await post("/api/report", { label: $("#paste-label").value, text: $("#paste-text").value }, { to: "lab" }); $("#paste").close(); } catch (e) {}

@@ -66,8 +66,25 @@ AUTOMATIC_STYLES = ('<office:automatic-styles>'
                     '</office:automatic-styles>')
 
 
+# 2.2 as in RVL's template: a heading, the consultation table (Consultation | Name & Rank | Results) and a
+# sentence after which the desk-findings table goes. The placeholder names here are made up: the export
+# fills by column position, so it does not depend on them.
+SECTION_2_2 = ('<text:h text:outline-level="2">2.2 Results Client/Manager Consultation and Desk Research</text:h>'
+               '<text:p text:style-name="P3">Consultations were held with the people below.</text:p>'
+               + '<table:table table:name="Consult" table:style-name="Consult">'
+                 '<table:table-column table:style-name="Consult.A" table:number-columns-repeated="3"/>'
+                 '<table:table-row><table:table-cell table:style-name="Consult.H"><text:p text:style-name="TH">Consultation</text:p></table:table-cell>'
+                 '<table:table-cell table:style-name="Consult.H"><text:p text:style-name="TH">Name &amp; Rank</text:p></table:table-cell>'
+                 '<table:table-cell table:style-name="Consult.H"><text:p text:style-name="TH">Results</text:p></table:table-cell></table:table-row>'
+                 '<table:table-row><table:table-cell table:style-name="Consult.B"><text:p text:style-name="TD">&lt;consult_type&gt;</text:p></table:table-cell>'
+                 '<table:table-cell table:style-name="Consult.B"><text:p text:style-name="TD">&lt;consult_name&gt;</text:p></table:table-cell>'
+                 '<table:table-cell table:style-name="Consult.B"><text:p text:style-name="TD">&lt;consult_result&gt;</text:p></table:table-cell></table:table-row>'
+                 '</table:table>'
+               + '<text:p text:style-name="P3">The documents reviewed are presented in the following tables.</text:p>')
 CONTENT = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {NS}>{AUTOMATIC_STYLES}<office:body><office:text>'
-           + table("p", row("Project Number", ph("projectnumber")), row("Report Status", ph("reportstatus")))
+           + table("p", row("Project Number", ph("projectnumber")), row("Vessel Name", ph("vesselname")),
+                   row("Report Status", ph("reportstatus")))
+           + SECTION_2_2
            + table("i1", row("No.", "Application of Paint", "Name of Paints"), row(ph("no"), ph("application"), ph("paintname")))
            + table("i2", row("No.", "Name of Equipment"), row(ph("no"), ph("equipment")))
            + table("i3", row("No.", "Structural Component"), row(ph("no"), ph("component")))
@@ -76,6 +93,7 @@ CONTENT = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {NS}
            + table("t15", row("Hazardous Material", "Quantity", "Unit", "IHM Table"),
                    row("A-1 Asbestos", ph("quantity"), ph("unit"), "A"), row("A-2 Polychlorinated Biphenyls (PCB)", ph("quantity"), ph("unit"), "A"))
            + f"<text:p>Survey Findings:{ph('surveyfindings')}</text:p>"
+           + '<text:h text:outline-level="1">Appendix C – Desk Research</text:h><text:p text:style-name="P9">Fixed appendix text.</text:p>'
            + "</office:text></office:body></office:document-content>")
 
 

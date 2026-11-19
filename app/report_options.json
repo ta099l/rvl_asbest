@@ -1,0 +1,6 @@
+{
+  "note": "Additions to the project-specific parts of RVL's IHM template. To confirm with Rolf (docs/decisions.md, 2026-11-21).",
+  "vessel_rows": true,
+  "desk_findings_table": true,
+  "appendix_c_list": true
+}

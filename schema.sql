@@ -183,3 +183,30 @@ CREATE TABLE document (
     uploaded_at TEXT,
     UNIQUE (object_id, sha256)
 );
+
+-- 2.2 Results Client/Manager Consultation: one row per conversation (template columns
+-- Consultation | Name & Rank | Results).
+CREATE TABLE consultation (
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    consultation TEXT,                  -- e.g. "Interview on board"
+    name_rank   TEXT,                   -- e.g. "J. Example, Chief Engineer"
+    result      TEXT,
+    sort_order  INTEGER,
+    updated_by  TEXT,
+    updated_at  TEXT
+);
+
+-- 2.2 Desk research: what a document says about hazardous materials (to confirm with Rolf).
+CREATE TABLE desk_finding (
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    document_id INTEGER,                -- the uploaded document, when there is one
+    document    TEXT,                   -- its name as written in the report
+    supplier_component TEXT,
+    hm_present  TEXT,                   -- yes, no, unknown
+    remark      TEXT,
+    sort_order  INTEGER,
+    updated_by  TEXT,
+    updated_at  TEXT
+);

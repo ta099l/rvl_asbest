@@ -151,3 +151,22 @@ Type a name in the **Inspector** field at the top before you approve, register o
 - [ ] Drag files from Explorer onto the drop zone (the script used the same function as the drop, not a real drag).
 - [ ] Close the browser tab while files are being processed: the browser asks first.
 - [ ] With `JAMES_AI_PROVIDER=groq` and no internet: the summary says "The AI service was not available".
+
+## Intake and desk research (21 Nov 2026)
+
+**Checked by script (21 Nov 2026):** local headless Chrome, demo ship, fixture template. 8 of 8 checks passed.
+
+- [x] "New project" opens the intake page in new mode, with Assignment, Project, Vessel and Survey location; "More" is folded.
+- [x] Typing IMO 9000000 offers "Copy vessel details from survey J-26-014"; one click fills the vessel fields.
+- [x] "Create project" saves everything and stays on the new project's intake; the Survey Location reads "Quay 4 (fictitious), Rotterdam, NL".
+- [x] Consultation: add a row, fill it (saved per field), add a second and remove it.
+- [x] A document added with kind SDoC / MD; a desk finding with "No".
+- [x] The export (fixture template) shows: IMO Number, Flag and Year Built after Vessel Name; the consultation row in the 2.2 table; the desk-findings table after the sentence; the document under Appendix C.
+- [x] No script errors.
+
+**Still for a person, in the real template (LibreOffice and Word):**
+- [ ] The three new Project Information rows look like the other rows.
+- [ ] The 2.2 consultation table: each value is in the right column, and the header stays.
+- [ ] The desk-findings table looks like the consultation table and fits the page width (it has 4 columns, copied from a 3-column table).
+- [ ] Appendix C shows the list right under its heading.
+- [ ] Text with < and & (for example "Gasket <see drawing> & bolts") shows exactly like that.

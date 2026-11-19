@@ -57,7 +57,7 @@ class FrameHelper(unittest.TestCase):
              "sha": SHA, "width": 400, "height": 300, "path": "x"}
         out = fill_photo_grid(PHOTO_GRID, [p], [7.7, 8.0], {})
         ET.fromstring(WRAP.format(out))                                  # still well-formed
-        self.assertIn("Foto | F-1 · MM-1 – Pipe &amp; &lt;flange&gt;", out)
+        self.assertIn("Foto | F-1 · MM-1 – Pipe &amp; &#60;flange&gt;", out)            # '<' as &#60;: never a placeholder
 
     def test_column_width_minus_padding_from_the_template_styles(self):
         widths = photo_cell_widths(CONTENT, PHOTO_GRID)
