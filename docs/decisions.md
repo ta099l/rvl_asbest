@@ -420,3 +420,30 @@ Found while testing the full flow with the fictional set dev5 (upload, approve, 
 - **Tests:** new `app/test_export_photos.py` (14).
 - **Out of scope:** .docx output (open question for Rolf), changing the template itself.
 - **Agreed by:** Tasnim (asked for it). Ivan: to review.
+
+## 2026-11-20: Upload page: drop every file of a survey at once (made at Tasnim's request, for Ivan to review)
+
+- **Why:** Rico's picture from the meeting: one page where you upload everything, after which the tool shows what it found. Rolf: few clicks, little typing.
+- **Route:** `POST /api/file?object=&name=` takes the raw file (no base64). The size limit follows the extension and is checked **before** reading: PDF 20 MB (`JAMES_MAX_PDF_MB`; 18 MB was only needed for base64 in JSON), images the photo limit.
+- **Sorting** (`app/uploads.py`), by content first, then name:
+  - **PDF** → James tries the existing extractor. A readable results table means a **lab report**, which goes through the existing chain (extract → rules → AI → proposals). Otherwise James cannot tell: the file is kept and the page asks with one click, **Lab report / Drawing**.
+    - "Drawing" files it as `ga_drawing`.
+    - "Lab report" keeps it as `other` / `unreadable_lab`, with "paste the lines on Lab results".
+  - **JPG/PNG/HEIC** → the P4 photo flow, unless the name says drawing.
+  - A **name says drawing** when it has a whole word "drawing(s)", "tekening(en)", "plan(s)" or "layout(s)" ("plan" yes, "plank" or "floorplan" no), or starts with "GA" followed by `-`, `_` or a space. A PDF with such a name is filed as a drawing without reading it.
+  - Anything else is refused with a clear message.
+- **Duplicates by file hash** (sha256) per project, for lab reports (`lab_report.source_sha256`), photos and documents: skipped with a message.
+- **Documents:** new table `document`, additive, on old files too. `kind` is one of `ga_drawing`, `previous_ihm`, `sdoc_md`, `sds`, `other`, so P8 can reuse it. `status` is filed, ask or unreadable_lab.
+  - Files are stored as received under `<data>/docs/<object>/<sha256>.<ext>`.
+  - `GET /api/document/<id>?object=` serves them only for their own project.
+  - Listed on the **Desk research** tab. Adds, changes and moves are logged and never mark lab proposals out of date.
+- **Wrong guesses:** one click, **Move to drawings / Move to photos**, logged.
+  - A photo that filled a registered photo number (e.g. F-012) keeps that number and its link when its file is moved to the drawings; it is "photo missing" again (found in the browser check; test).
+  - A drawing image moved to the photos goes through the photo flow (numbered, proposed link).
+- **Progress:** the browser sends the files one at a time, with a progress bar under the tabs on every page, so the page stays usable. Closing the browser tab while files are left asks first. The batch does not survive closing the tab: that would need a server-side job queue (not built).
+- **Summary:** lab reports (lines, linked by rules, proposed by AI, needing you), photos (linked, needing you), drawings filed and the link-check count, each with a button to the right tab.
+  - When the AI was not used, one line says why: "The AI service was not available" (connection failed) or "No AI answer for these reports (stand-in mode)" (replay). Processing completes with the rules either way.
+- **Not changed:** a lab PDF still holds the lock while the AI step runs (as before). With Groq that can block other windows for a few seconds per report.
+- **Out of scope:** the intake form upload.
+- **Tests:** new `app/test_uploads.py` (13). Browser checks in local headless Chrome, demo data only: 9 of 9.
+- **Agreed by:** Tasnim (asked for it). Ivan: to review.

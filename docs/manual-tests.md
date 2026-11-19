@@ -133,3 +133,21 @@ Type a name in the **Inspector** field at the top before you approve, register o
 - [ ] The cover says Draft, and the file name ends in `_DRAFT.odt`.
 - [ ] All standard text (chapters, headings, the Summary) reads exactly as in the template.
 - [ ] Count: open the .odt as a zip (rename to .zip): the number of files in `Pictures/` equals the number of photos with a picture in the document.
+
+## Upload page (20 Nov 2026)
+
+**Checked by script (20 Nov 2026):** local headless Chrome, demo ship. One drop of dev4_lab.pdf, dev5_lab.pdf, the 19 demo photos, "GA-02 deck plan.png", a PDF without a results table, and a copy of dev5. 9 of 9 checks passed.
+
+- [x] The bar under the tabs shows "Processing 3 of 24"; the Bronbladen tab could be opened while files were still being processed.
+- [x] Summary: "2 lab reports read: 22 lines, 1 linked by rules, 0 proposed by AI, 21 need you" (the demo PDFs belong to other test sets, so most codes are not in the demo ship's register); "No AI answer for these reports (stand-in mode)"; "19 photos: 17 linked, 2 need you"; "1 drawing filed"; "Link check: 43 issues".
+- [x] The copy of dev5 is skipped: "dev5 copy.pdf was already uploaded: skipped".
+- [x] The PDF without a table asks "Lab report / Drawing"; one click files it.
+- [x] Desk research lists both drawings.
+- [x] "Review lab results" opens the last lab report.
+- [x] "Move to drawings" moves a photo.
+- [x] No horizontal scroll at 768 px; no script errors.
+
+**Still for a person:**
+- [ ] Drag files from Explorer onto the drop zone (the script used the same function as the drop, not a real drag).
+- [ ] Close the browser tab while files are being processed: the browser asks first.
+- [ ] With `JAMES_AI_PROVIDER=groq` and no internet: the summary says "The AI service was not available".

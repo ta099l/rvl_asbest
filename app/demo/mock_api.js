@@ -223,6 +223,7 @@
       conditions: CONDITIONS,
       photos: [], sources: [...new Set(o.register.map(s => s.source).filter(Boolean))].sort(), photo_max_mb: 15,
       link_check: null,                       // the link check runs in the Python app only
+      documents: [], pdf_max_mb: 20,
       register: o.register.map(s => ({ ...s, group: groupForCode(s.code), condition: ((o.sources || {})[s.source] || ""), missing: s.status === "sampled" ? [["source", s.source], ["deck", s.deck], ["photo", s.photo], ["drawing", s.drawing]].filter(([, v]) => !v).map(([k]) => k) : [] })),
       register_log: o.log, reports: reports.map(x => ({ id: x.id, label: x.label, report_ref: x.ref, lab: x.lab, ingested_at: x.ingested_at, practice: !!x.seeded })),
       report: r ? reportView(r) : null, asset: assetView(o), thresholds_note: "Thresholds: to confirm by RVL (app/thresholds.json)." };
@@ -336,6 +337,7 @@
     "/api/report": () => fail(APP_ONLY), "/api/upload-pdf": () => fail(APP_ONLY),
     "/api/photo": () => fail(APP_ONLY), "/api/photo-update": () => fail(APP_ONLY), "/api/photo-accept": () => fail(APP_ONLY),
     "/api/certificate": () => fail(APP_ONLY), "/api/check-confirm": () => fail(APP_ONLY),
+    "/api/file": () => fail(APP_ONLY), "/api/file-decide": () => fail(APP_ONLY), "/api/file-move": () => fail(APP_ONLY),
     "/api/reread": b => { const r = report(b.report_id); if (r.signed) fail("this report is signed; its proposals can no longer change");
                           r.readRev = st.objects.find(o => o.id === r.object).regRev;
                           r.agent.push({ at: now(), by: "Agent", text: "Read again with the current field registration (in this demo page the proposals stay the same; the app runs the linker again)." }); return r.id; },

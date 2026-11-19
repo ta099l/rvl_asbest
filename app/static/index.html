@@ -302,6 +302,13 @@
   details.fold > summary { padding: var(--s-4) var(--s-5); cursor: pointer; font-weight: 600; }
   details.fold[open] > summary { padding-bottom: var(--s-3); }
   .btn-link { font-size: var(--fs-sm); font-weight: 500; }
+  .dropzone { display: grid; justify-items: center; gap: var(--s-2); padding: var(--s-6) var(--s-4); border: 2px dashed var(--border-strong);
+              border-radius: var(--r-md); text-align: center; background: var(--surface-2); }
+  .dropzone.over { border-color: var(--brand); background: var(--brand-soft); }
+  .batchbar { background: var(--brand-soft); border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+  .batchbar-inner { display: flex; align-items: center; gap: var(--s-3); padding-top: 6px; padding-bottom: 6px; flex-wrap: wrap; }
+  .batchbar progress { flex: 1; min-width: 120px; height: 8px; }
+  .issue.note { background: var(--surface-2); }
   .bb-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: var(--s-5); align-items: start; margin-top: var(--s-5); }
   .bb-list { position: sticky; top: 120px; max-height: calc(100vh - 140px); overflow-y: auto; }
   .bb-group { padding: var(--s-2) var(--s-2) 0; }
@@ -570,7 +577,8 @@ function restoreDrafts() {
 
 // ---------- Drawing: top bar and tabs once per page, the page itself after every action ----------
 function draw() {
-  if (!$("#page")) $("#app").innerHTML = `<div class="sticky-head"><div id="top"></div><div id="tabs"></div></div><main class="container" id="page"></main>`;
+  if (!$("#page")) $("#app").innerHTML = `<div class="sticky-head"><div id="top"></div><div id="tabs"></div><div id="batchbar"></div></div><main class="container" id="page"></main>`;
+  renderBatch();
   drawTop(); drawTabs(); drawPage();
 }
 function drawTop() { $("#top").innerHTML = topbar(); wireTop(); }
@@ -670,7 +678,7 @@ function dashboardPage() {
   const filled = INTAKE.filter(([k]) => intakeValue(k)).length, gaps = reg.filter(s => s.missing.length).length;
   const unknownCodes = reg.filter(s => s.group && s.group.unknown).length;
   const cards = [
-    ["upload", "Not built yet", "One place for photos, reports and the intake form. For now: photos on Fieldwork, lab reports on Lab results.", "todo"],
+    ["upload", "Drop all files", "Lab reports, photos and drawings of the survey in one go; James sorts and reads them.", "todo"],
     ["intake", `${filled} of ${INTAKE.length} fields filled`, "Project details for the title page of the report.", filled === INTAKE.length ? "done" : "open"],
     ["desk-research", "Not built yet", "Drawings and documents of the object.", "todo"],
     ["fieldwork", `${reg.length} sample${reg.length === 1 ? "" : "s"} registered`, !reg.length ? "Register the samples from site"
@@ -807,6 +815,120 @@ function wirePhotos() {
   document.querySelectorAll(".ph-no").forEach(el => el.onchange = () => save(el, "photo_no"));
   document.querySelectorAll(".ph-desc").forEach(el => el.onchange = () => save(el, "description"));
 }
+
+// ---------- Upload: drop every file of the survey at once ----------
+// The browser sends the files one at a time (the server sorts and reads each one); the bar under the tabs shows
+// the progress on every page, so Rolf can keep working. Closing the tab while files are left asks first.
+let batch = null;                             // {oid, total, done, current, running, results: []}
+const batchResults = {};                      // per project: the results of the last batch, for the summary
+function renderBatch() {
+  const el = $("#batchbar"); if (!el) return;
+  if (!batch || !batch.running) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="batchbar"><div class="container batchbar-inner" role="status" aria-live="polite">
+    <span>Processing ${Math.min(batch.done + 1, batch.total)} of ${batch.total}: ${esc(batch.current)}</span>
+    <progress max="${batch.total}" value="${batch.done}"></progress>
+    <a href="${href("upload", batch.oid)}">Summary</a></div></div>`;
+}
+window.addEventListener("beforeunload", e => { if (batch && batch.running) { e.preventDefault(); e.returnValue = ""; } });
+async function uploadFiles(files) {
+  if (needName()) return;
+  if (batch && batch.running) return toast("Files are still being processed. Wait until this batch is done.");
+  const list = [...files], oid = route.oid;
+  if (!list.length) return;
+  batch = { oid, total: list.length, done: 0, current: "", running: true, results: [] };
+  renderBatch();
+  for (const f of list) {
+    batch.current = f.name; renderBatch();
+    const limit = (f.name.toLowerCase().endsWith(".pdf") ? S.pdf_max_mb : S.photo_max_mb) || 15;
+    if (f.size > limit * 1024 * 1024) { batch.results.push({ kind: "refused", name: f.name, message: `${f.name}: larger than ${limit} MB` }); batch.done++; continue; }
+    try {
+      const res = await fetch(`/api/file?object=${oid}&name=${encodeURIComponent(f.name)}`, { method: "POST", body: f,
+        headers: { "Content-Type": "application/octet-stream", "X-Inspector": encodeURIComponent(inspector) } });
+      if (res.status === 401) { batch.running = false; location.href = "/login"; return; }
+      const d = await res.json().catch(() => ({ error: `${f.name}: refused by the server (${res.status})` }));
+      batch.results.push(res.ok ? d : { kind: "refused", name: f.name, message: d.error });
+    } catch (e) { batch.results.push({ kind: "refused", name: f.name, message: `${f.name}: the upload was cut off (connection lost)` }); }
+    batch.done++; renderBatch();
+  }
+  batch.running = false;
+  batchResults[oid] = batch.results;
+  renderBatch();
+  if (route.oid === oid) await refresh();
+  toast(`${list.length} file${list.length === 1 ? "" : "s"} processed: see the summary on Upload.`);
+}
+function summaryLines(results) {
+  const lab = results.filter(r => r.kind === "lab"), ph = results.filter(r => r.kind === "photo" && !r.skipped);
+  const sum = (k) => lab.reduce((n, r) => n + r[k], 0);
+  const lines = [];
+  if (lab.length) lines.push({ text: `${lab.length} lab report${lab.length === 1 ? "" : "s"} read: ${sum("lines")} lines, ${sum("by_rules")} linked by rules, ${sum("by_ai")} proposed by AI, ${sum("needs_you")} need${sum("needs_you") === 1 ? "s" : ""} you`,
+                               button: "Review lab results", go: href("lab", route.oid, lab[lab.length - 1].report) });
+  const ai = new Set(lab.map(r => r.ai));
+  if (ai.has("unavailable")) lines.push({ text: "The AI service was not available: these reports were read with the rules only.", note: true });
+  else if (ai.has("stand_in_missing")) lines.push({ text: "No AI answer for these reports (stand-in mode): read with the rules only.", note: true });
+  if (ph.length) { const linked = ph.filter(r => r.linked).length;
+    lines.push({ text: `${ph.length} photo${ph.length === 1 ? "" : "s"}: ${linked} linked, ${ph.length - linked} need${ph.length - linked === 1 ? "s" : ""} you`, button: "Review photos", fix: { page: "fieldwork", photos: true } }); }
+  const dr = results.filter(r => r.kind === "drawing").length;
+  if (dr) lines.push({ text: `${dr} drawing${dr === 1 ? "" : "s"} filed`, button: "Open desk research", go: href("desk-research") });
+  if (Array.isArray(S.link_check)) lines.push({ text: S.link_check.length ? `Link check: ${S.link_check.length} issue${S.link_check.length === 1 ? "" : "s"}` : "Link check: all links complete", button: "Open bronbladen", go: href("bronbladen") });
+  return lines;
+}
+function uploadPage() {
+  const results = batchResults[route.oid] || [], running = batch && batch.running && batch.oid === route.oid;
+  const ask = results.filter(r => r.kind === "ask" && (S.documents || []).some(d => d.id === r.id && d.status === "ask"));
+  const other = results.filter(r => ["skipped", "refused"].includes(r.kind) || (r.kind === "photo" && r.skipped));
+  const movable = results.filter(r => (r.kind === "photo" && !r.skipped && r.id) || (r.kind === "drawing" && r.id));
+  const lines = results.length && !running ? summaryLines(results) : [];
+  return pageHead("Upload", "Drop every file of the survey here: lab report PDFs, photos and drawings. James sorts them, reads them and shows what is left for you to check. Fictitious files only.")
+    + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">
+      <div class="dropzone" id="dropzone" tabindex="-1"><b>Drop files here</b><span class="small">PDF, JPG or PNG · lab PDFs up to ${esc(S.pdf_max_mb || 20)} MB, photos up to ${esc(S.photo_max_mb || 15)} MB</span>
+        <label class="filebtn">Choose files<input type="file" id="up-files" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"></label></div>
+      ${running ? `<p class="small" style="margin-top:12px">Processing ${batch.done} of ${batch.total}… You can keep working on other tabs.</p>` : ""}
+    </div></section>`
+    + (lines.length ? `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><h2 style="margin-bottom:8px">Summary</h2><div class="issues">${lines.map((l, n) => `<div class="issue${l.note ? " note" : ""}">
+        <span>${esc(l.text)}</span>${l.button ? `<button class="primary" data-sum="${n}">${esc(l.button)}</button>` : ""}</div>`).join("")}</div></div></section>` : "")
+    + (ask.length ? `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><h3>Lab report or drawing?</h3>${ask.map(r => `<div class="issue">
+        <span>${esc(r.name)}: no lab results table found.</span><button data-ask="${r.id}" data-answer="lab">Lab report</button><button data-ask="${r.id}" data-answer="drawing">Drawing</button></div>`).join("")}</div></section>` : "")
+    + (movable.length ? `<details class="panel fold"><summary>Sorted wrongly? <span class="small">· move a photo to the drawings, or a drawing image to the photos</span></summary><div class="panel-body"><div class="issues">${movable.map(r => `<div class="issue">
+        <span>${esc(r.name)} <span class="small muted">· ${r.kind === "photo" ? "photo " + esc(r.photo_no) : "drawing"}</span></span>
+        ${r.kind === "photo" ? `<button data-move="photo" data-id="${r.id}">Move to drawings</button>` : /\.(jpe?g|png)$/i.test(r.name) ? `<button data-move="document" data-id="${r.id}">Move to photos</button>` : ""}</div>`).join("")}</div></div></details>` : "")
+    + (other.length ? `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)"><h3>Skipped or refused</h3>${other.map(r => `<div class="small">${esc(r.message)}</div>`).join("")}</div></section>` : "");
+}
+function wireUpload() {
+  const dz = $("#dropzone"), inp = $("#up-files");
+  if (inp) inp.onchange = () => uploadFiles(inp.files);
+  if (dz) {
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+    dz.addEventListener("drop", e => { e.preventDefault(); dz.classList.remove("over"); uploadFiles(e.dataTransfer.files); });
+  }
+  const lines = summaryLines(batchResults[route.oid] || []);
+  document.querySelectorAll("[data-sum]").forEach(b => b.onclick = () => { const l = lines[Number(b.dataset.sum)]; l.fix ? doFix(l.fix) : go(l.go); });
+  document.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => {
+    if (needName()) return;
+    post("/api/file-decide", { id: Number(b.dataset.ask), answer: b.dataset.answer, by: inspector }, { onOk: d => toast(d.message) }).catch(() => {});
+  });
+  document.querySelectorAll("[data-move]").forEach(b => b.onclick = () => {
+    if (needName()) return;
+    const id = Number(b.dataset.id), kind = b.dataset.move;
+    post("/api/file-move", { kind, id, by: inspector }, { onOk: d => {
+      toast(d.message);
+      const r = (batchResults[route.oid] || []).find(x => x.id === id && (kind === "photo" ? x.kind === "photo" : x.kind === "drawing"));
+      if (r) { r.kind = "moved"; }
+    } }).catch(() => {});
+  });
+}
+const DOC_KIND = { ga_drawing: "Drawing (GA)", previous_ihm: "Previous IHM", sdoc_md: "SDoC / MD", sds: "SDS", other: "Other" };
+function deskResearchPage() {
+  const docs = S.documents || [];
+  const status = (d) => d.status === "ask" ? '<span class="pill p-check">lab report or drawing?</span>'
+    : d.status === "unreadable_lab" ? '<span class="pill p-check">lab report, not readable: paste its lines</span>' : "";
+  return pageHead("Desk research", "Drawings and documents of the object. Drop them on the Upload tab.")
+    + `<section class="panel"><div class="panel-body" style="padding-top:var(--s-5)">${docs.length ? `<div class="table-frame tscroll"><table><thead><tr><th>Document</th><th>Kind</th><th>Size</th><th>Added</th><th><span class="sr-only">Status</span></th></tr></thead><tbody>
+      ${docs.map(d => `<tr><td><a href="/api/document/${d.id}?object=${route.oid}" target="_blank" rel="noopener">${esc(d.name)}</a></td><td>${esc(DOC_KIND[d.kind] || d.kind)}</td>
+        <td>${Math.max(1, Math.round((d.size || 0) / 1024))} kB</td><td>${esc(d.by || "")}</td><td>${status(d)}</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">No drawings or documents yet. Drop them on <a href="${href("upload")}">Upload</a>.</div>`}</div></section>`;
+}
+function wireDeskResearch() {}
 
 // ---------- Bronbladen: the link check, one line per broken link, each with its fix ----------
 let pendingFix = null;                        // where to scroll after a Fix button changed page
@@ -1055,9 +1177,9 @@ function wireReport() {
 const VIEWS = {
   projects: { view: projectsPage, wire: wireProjects },
   dashboard: { view: dashboardPage, wire: wireDashboard },
-  upload: { view: () => placeholder("Upload", "", `Coming next: one place to upload photos, reports and the intake form. For now, upload photos on <a href="${href("fieldwork")}">Fieldwork</a> and lab reports on <a href="${href("lab")}">Lab results</a>.`), wire: () => {} },
+  upload: { view: uploadPage, wire: wireUpload },
   intake: { view: intakePage, wire: wireIntake },
-  "desk-research": { view: () => placeholder("Desk research", "", "Coming later: drawings and documents of the object."), wire: () => {} },
+  "desk-research": { view: deskResearchPage, wire: wireDeskResearch },
   fieldwork: { view: fieldworkPage, wire: wireFieldwork },
   lab: { view: labPage, wire: wireLab },
   bronbladen: { view: bronbladenPage, wire: wireBronbladen },

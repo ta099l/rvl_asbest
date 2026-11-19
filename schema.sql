@@ -166,3 +166,20 @@ CREATE TABLE photo (
     UNIQUE (object_id, photo_no),
     UNIQUE (object_id, sha256)
 );
+
+-- A document of the survey that is not a photo or a lab report: a drawing now, later previous IHMs,
+-- SDoC/MD and SDS (P8). The file lives under <data>/docs/<object id>/<sha256>.<ext>.
+CREATE TABLE document (
+    id          INTEGER PRIMARY KEY,
+    object_id   INTEGER NOT NULL REFERENCES object(id),
+    kind        TEXT NOT NULL,          -- ga_drawing, previous_ihm, sdoc_md, sds, other
+    status      TEXT NOT NULL DEFAULT 'filed',  -- filed; ask (lab report or drawing?); unreadable_lab
+    stored_name TEXT NOT NULL,          -- <sha256>.<ext>, never a name from the user
+    original_name TEXT,
+    sha256      TEXT NOT NULL,
+    mime        TEXT,
+    size        INTEGER,
+    uploaded_by TEXT,
+    uploaded_at TEXT,
+    UNIQUE (object_id, sha256)
+);

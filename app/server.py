@@ -40,7 +40,7 @@ if str(ROOT) not in sys.path:
 
 from ai.james_ai.ai_step import ReplayClient            # noqa: E402
 from ai.james_ai.contract import ContractError          # noqa: E402
-from app import export_odt, photos                      # noqa: E402
+from app import export_odt, photos, uploads             # noqa: E402
 from app.auth import COOKIE, LOGIN_PAGE, SESSION_SECONDS, Auth, parse_users  # noqa: E402
 from app.demo_data import SHIP                          # noqa: E402
 from app.ihm import (GROUP_LABEL, GROUPS, PART_I, SECTIONS_2_3, TABLE_LINES, findings, group_for_code,  # noqa: E402
@@ -644,6 +644,130 @@ class Service:
         issues.sort(key=lambda i: i["severity"] != "error")
         return issues
 
+    # ---------- the upload page: one drop for lab PDFs, photos and drawings ----------
+    def upload_file(self, object_id, name: str, data: bytes, by: str) -> dict:
+        """Sort one dropped file and process it. Returns what the summary needs for this file."""
+        if not (by or "").strip():
+            raise ValueError("enter the inspector name first: every upload is signed")
+        name = Path(name or "file").name[:200]
+        kind = uploads.sort_file(name, data)
+        if kind == "photo":
+            return {"kind": "photo", "name": name, **self.upload_photo(object_id, name, data, by)}
+        if kind == "drawing":
+            return self.add_document(object_id, name, data, "ga_drawing", "filed", by)
+        if kind == "pdf":
+            return self.process_pdf(object_id, name, data, by)
+        raise ValueError("James cannot read this file type: drop lab report PDFs, photos (JPG, PNG) and drawings (PDF, PNG)")
+
+    def add_document(self, object_id, name: str, data: bytes, kind: str, status: str, by: str) -> dict:
+        sha = photos.sha256(data)
+        with self.lock:
+            oid = self.oid(object_id)
+            dup = self.store.document_by_sha(oid, sha)
+        if dup:
+            return {"kind": "skipped", "name": name, "message": f"{name} is already here as {dup['original_name']}: skipped"}
+        stored, mime = uploads.store_document(self.data_dir, oid, sha, data)
+        with self.lock:
+            if self.store.document_by_sha(oid, sha):
+                return {"kind": "skipped", "name": name, "message": f"{name} is already here: skipped"}
+            did = self.store.add_document(oid, {"kind": kind, "status": status, "stored_name": stored, "original_name": name,
+                                                "sha256": sha, "mime": mime, "size": len(data)}, by)
+        if status == "ask":
+            return {"kind": "ask", "name": name, "id": did,
+                    "message": f"{name}: no lab results table found. Is it a lab report or a drawing?"}
+        return {"kind": "drawing", "name": name, "id": did, "message": f"{name} filed as a drawing"}
+
+    def process_pdf(self, object_id, name: str, data: bytes, by: str) -> dict:
+        """A PDF with a readable results table is a lab report: extract -> rules -> AI -> proposals.
+        Without one James cannot tell, so the file is kept and the inspector chooses."""
+        from james.extract import extract_lab_text
+        sha = photos.sha256(data)
+        with self.lock:
+            oid = self.oid(object_id)
+            dup = self.store.lab_report_by_sha(oid, sha) or self.store.document_by_sha(oid, sha)
+        if dup:
+            return {"kind": "skipped", "name": name, "message": f"{name} was already uploaded: skipped"}
+        with tempfile.TemporaryDirectory() as tmp:          # reading the PDF happens outside the lock
+            path = Path(tmp) / "upload.pdf"
+            path.write_bytes(data)
+            try:
+                ex = extract_lab_text(str(path))
+            except Exception:
+                ex = None
+        if ex is None or "---\n" not in ex.text or not ex.text.split("---\n", 1)[1].strip():
+            return self.add_document(oid, name, data, "other", "ask", by)
+        with self.lock:
+            rid = self.ingest(name, ex.text, source_file=name,
+                              read_method={"text": "PDF text layer", "ocr": "PDF via OCR", "mixed": "PDF, text layer and OCR"}.get(ex.method, ex.method),
+                              sha256=sha, object_id=oid)
+            for n in ex.notes:
+                self.log(rid, n)
+            run = self.runs[rid]
+            props, src = run.response["proposals"], run.source
+            by_rules = sum(1 for p in props if p["sample"] and src.get(p["n"]) in ("rules", "both", "rules (ai unusable)"))
+            by_ai = sum(1 for p in props if p["sample"] and src.get(p["n"]) == "ai")
+            ai = "not_needed" if run.ai is None else "used"
+            if run.ai is not None and run.ai.problems:
+                ai = "stand_in_missing" if "NoRecordedAnswer" in run.ai.problems[0] else "unavailable"
+            return {"kind": "lab", "name": name, "report": rid, "lines": len(props), "by_rules": by_rules, "by_ai": by_ai,
+                    "needs_you": sum(1 for p in props if not p["sample"]), "ai": ai,
+                    "message": f"{name}: {len(props)} lab lines read"}
+
+    def decide_file(self, object_id, doc_id: int, answer: str, by: str) -> str:
+        """Answer 'lab report or drawing?' for a PDF without a readable results table."""
+        with self.lock:
+            oid = self.oid(object_id)
+            row = self.store.document(int(doc_id))
+            if row is None or row["object_id"] != oid or row["status"] != "ask":
+                raise ValueError("this file is not waiting for an answer")
+            if answer == "drawing":
+                self.store.update_document(oid, row["id"], "ga_drawing", "filed", by)
+                return f"{row['original_name']} filed as a drawing"
+            if answer == "lab":
+                self.store.update_document(oid, row["id"], "other", "unreadable_lab", by)
+                return (f"{row['original_name']}: no results table could be read. Paste the lines on Lab results "
+                        "(Paste a lab report); the file is kept under Desk research.")
+            raise ValueError("answer 'lab' or 'drawing'")
+
+    def move_file(self, object_id, kind: str, item_id: int, by: str) -> str:
+        """One click for a wrong guess: a photo to the drawings, or a drawing image to the photos."""
+        with self.lock:
+            oid = self.oid(object_id)
+        if kind == "photo":                                   # photo -> drawing (its stored JPG)
+            with self.lock:
+                row = self.store.photo(int(item_id))
+                if row is None or row["object_id"] != oid or not row["stored_name"]:
+                    raise ValueError("unknown photo in this project")
+                data = photos.photo_path(self.data_dir, oid, row["stored_name"]).read_bytes()
+                name = row["original_name"] or f"photo {row['photo_no']}.jpg"
+            out = self.add_document(oid, name, data, "ga_drawing", "filed", by)
+            with self.lock:
+                self.store.remove_photo(oid, row["id"], by, f"moved to the drawings as {name}")
+            return out.get("message", "")
+        if kind == "document":                                # drawing image -> photo
+            with self.lock:
+                row = self.store.document(int(item_id))
+                if row is None or row["object_id"] != oid:
+                    raise ValueError("unknown document in this project")
+                if row["mime"] not in ("image/jpeg", "image/png"):
+                    raise ValueError("only an image can become a photo; a PDF stays a document")
+                data = uploads.document_path(self.data_dir, oid, row["stored_name"]).read_bytes()
+            out = self.upload_photo(oid, row["original_name"] or "drawing.jpg", data, by)
+            with self.lock:
+                self.store.remove_document(oid, row["id"], by, f"moved to the photos as photo {out.get('photo_no', '?')}")
+            return out.get("message", "")
+        raise ValueError("move a 'photo' or a 'document'")
+
+    def document_file(self, object_id, doc_id: int):
+        """(path, mime, original name) of a document, only when it belongs to the project the request names."""
+        if object_id in (None, ""):
+            raise ValueError("name the project")
+        oid = self.oid(object_id)
+        row = self.store.document(doc_id)
+        if row is None or row["object_id"] != oid:
+            raise ValueError("document not found in this project")
+        return uploads.document_path(self.data_dir, oid, row["stored_name"]), row["mime"], row["original_name"] or "document"
+
     # ---------- bronbladen: one Source Record per source, built from approved lab lines only ----------
     def bronbladen(self, oid: int, issues: Optional[List[dict]] = None) -> List[dict]:
         """Every source as its bronblad, in the order of the fieldwork groups (P2).
@@ -792,6 +916,10 @@ class Service:
                                "proposed_sample": r["proposed_sample"], "proposed_source": r["proposed_source"],
                                "proposal_reason": r["proposal_reason"] or ""} for r in self.store.photos(oid)],
                    "sources": sorted(sources),
+                   "documents": [{"id": d["id"], "kind": d["kind"], "status": d["status"], "name": d["original_name"] or "",
+                                  "mime": d["mime"], "size": d["size"], "at": d["uploaded_at"], "by": d["uploaded_by"]}
+                                 for d in self.store.documents(oid)],
+                   "pdf_max_mb": uploads.max_pdf_bytes() // (1024 * 1024),
                    "link_check": self.link_check(oid),
                    "bronbladen": None,
                    "photo_max_mb": photos.max_photo_bytes() // (1024 * 1024),
@@ -1162,6 +1290,9 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/photo/(\d+)(/thumb)?", path)
         if m:
             return self.get_photo(int(m.group(1)), bool(m.group(2)))
+        m = re.fullmatch(r"/api/document/(\d+)", path)
+        if m:
+            return self.get_document(int(m.group(1)))
         if path in ("/", "/index.html"):
             self.send_html((STATIC / "index.html").read_text(encoding="utf-8"))
         elif path == "/api/export":
@@ -1244,9 +1375,53 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"error": f"{name}: {e}"}, 400)
         self.send_json(out)
 
+    def post_file(self) -> None:
+        """POST /api/file?object=<id>&name=<file name>, the raw file as body: the upload page's drop zone.
+        The size limit follows the file name's extension and is checked before reading."""
+        q = parse_qs(urlsplit(self.path).query)
+        name = (q.get("name") or ["file"])[0]
+        limit = uploads.max_pdf_bytes() if name.lower().endswith(".pdf") else photos.max_photo_bytes()
+        length = self.body_length(limit)
+        if length is None:
+            return
+        user = self.current_user()
+        if user is None:
+            self.close_connection = True
+            return self.send_json({"error": "login required"}, 401)
+        data = self.rfile.read(length)
+        if len(data) != length:
+            self.close_connection = True
+            return
+        try:
+            by = user or unquote(self.headers.get("X-Inspector", ""))
+            out = SERVICE.upload_file(q.get("object", [None])[0], name, data, by)
+        except (ValueError, KeyError, TypeError) as e:
+            return self.send_json({"error": f"{name}: {e}"}, 400)
+        self.send_json(out)
+
+    def get_document(self, doc_id: int) -> None:
+        q = parse_qs(urlsplit(self.path).query)
+        try:
+            with SERVICE.lock:
+                path, mime, original = SERVICE.document_file(q.get("object", [None])[0], doc_id)
+            data = path.read_bytes()
+        except (ValueError, FileNotFoundError):
+            return self.send_json({"error": "document not found in this project"}, 404)
+        safe = re.sub(r'[^A-Za-z0-9._ -]+', "_", original)[:120] or "document"
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'inline; filename="{safe}"')
+        self.send_header("Cache-Control", "private, max-age=300")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
         if urlsplit(self.path).path == "/api/photo":
             return self.post_photo()
+        if urlsplit(self.path).path == "/api/file":
+            return self.post_file()
         length = self.body_length(MAX_JSON_BYTES)
         if length is None:
             return
@@ -1353,6 +1528,12 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/source-new":
                 extra = {"created": SERVICE.new_source(oid, body.get("group", ""), body.get("samples") or [],
                                                        body.get("photos") or [], body.get("by", ""))}
+                rid = body.get("report_id")
+            elif path == "/api/file-decide":
+                extra = {"message": SERVICE.decide_file(oid, int(body["id"]), body.get("answer", ""), body.get("by", ""))}
+                rid = body.get("report_id")
+            elif path == "/api/file-move":
+                extra = {"message": SERVICE.move_file(oid, body.get("kind", ""), int(body["id"]), body.get("by", ""))}
                 rid = body.get("report_id")
             elif path == "/api/check-confirm":
                 SERVICE.confirm_check(oid, body.get("key", ""), body.get("by", ""))

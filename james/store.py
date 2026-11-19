@@ -26,14 +26,16 @@ _NEW_COLUMNS = {
     "photo": [("proposed_sample", "TEXT"), ("proposed_source", "TEXT"), ("proposal_reason", "TEXT")],
 }
 # Tables added after the first version; on an old file they are created and filled once (see _upgrade).
-_NEW_TABLES = ("source", "photo")
+_NEW_TABLES = ("source", "photo", "document")
 # What an inspector may change on a source (bronblad). The source number itself never changes.
 SOURCE_FIELDS = ("substance_group", "description", "condition", "quantity", "unit", "assessment", "conclusion", "drawing")
 ASSESSMENTS = ("confirmed", "not hazardous", "PCHM", "not accessible")
 # register_log actions about sources, photos, link-check confirmations and certificates typed in by the
 # inspector start with these words. They do not change what the linker reads, so they never mark lab
 # proposals out of date (register_changed_at skips them), and they do not show in the Fieldwork log.
-SOURCE_PHOTO_ACTIONS = ("source ", "photo ", "check ", "lab ")
+SOURCE_PHOTO_ACTIONS = ("source ", "photo ", "check ", "lab ", "document ")
+DOCUMENT_KINDS = ("ga_drawing", "previous_ihm", "sdoc_md", "sds", "other")
+DOCUMENT_STATUS = ("filed", "ask", "unreadable_lab")
 PHOTO_EDITABLE = ("photo_no", "description", "sample_code", "source_no")
 # Fields an inspector may change after registering a sample. The code itself never changes:
 # lab results and decisions hang on it.
@@ -335,6 +337,70 @@ class Store:
         with self.db:
             self.db.execute("UPDATE photo SET " + ", ".join(f"{k}=?" for k in new) + " WHERE id=?", [*new.values(), photo_id])
             self._log_register(object_id, new.get("photo_no") or row["photo_no"], action, "; ".join(diffs), by)
+
+    # ---------- documents (drawings now; previous IHMs, SDoC/MD and SDS later) ----------
+    def add_document(self, object_id: int, f: Dict[str, object], by: str) -> int:
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        if f["kind"] not in DOCUMENT_KINDS or f.get("status", "filed") not in DOCUMENT_STATUS:
+            raise ValueError("unknown document kind or status")
+        with self.db:
+            cur = self.db.execute(
+                "INSERT INTO document(object_id,kind,status,stored_name,original_name,sha256,mime,size,uploaded_by,uploaded_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (object_id, f["kind"], f.get("status", "filed"), f["stored_name"], f["original_name"], f["sha256"],
+                 f["mime"], f["size"], by.strip(), _now()))
+            self._log_register(object_id, str(f["original_name"]), "document added", f"{f['kind']} ({f.get('status', 'filed')})", by)
+            return cur.lastrowid
+
+    def document(self, doc_id: int) -> Optional[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM document WHERE id=?", (doc_id,)).fetchone()
+
+    def document_by_sha(self, object_id: int, sha: str) -> Optional[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM document WHERE object_id=? AND sha256=?", (object_id, sha)).fetchone()
+
+    def documents(self, object_id: int) -> List[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM document WHERE object_id=? ORDER BY id", (object_id,)).fetchall()
+
+    def update_document(self, object_id: int, doc_id: int, kind: str, status: str, by: str) -> None:
+        if not (by or "").strip():
+            raise ValueError("a named inspector is required")
+        row = self.document(doc_id)
+        if row is None or row["object_id"] != object_id:
+            raise ValueError("unknown document in this project")
+        if kind not in DOCUMENT_KINDS or status not in DOCUMENT_STATUS:
+            raise ValueError("unknown document kind or status")
+        with self.db:
+            self.db.execute("UPDATE document SET kind=?, status=? WHERE id=?", (kind, status, doc_id))
+            self._log_register(object_id, row["original_name"] or str(doc_id), "document changed",
+                               f"{row['kind']} ({row['status']}) -> {kind} ({status})", by)
+
+    def remove_document(self, object_id: int, doc_id: int, by: str, why: str) -> None:
+        """Only to move a wrongly sorted file to the photos; the move is logged (the file itself stays)."""
+        row = self.document(doc_id)
+        if row is None or row["object_id"] != object_id:
+            raise ValueError("unknown document in this project")
+        with self.db:
+            self.db.execute("DELETE FROM document WHERE id=?", (doc_id,))
+            self._log_register(object_id, row["original_name"] or str(doc_id), "document moved", why, by)
+
+    def remove_photo(self, object_id: int, photo_id: int, by: str, why: str) -> None:
+        """Only to move a wrongly sorted file to the drawings; the move is logged (the file itself stays).
+        A photo number that was registered before the upload (no proposal of its own) keeps its row: only the
+        file is taken off it again, so the number stays known as "photo missing"."""
+        row = self.photo(photo_id)
+        if row is None or row["object_id"] != object_id:
+            raise ValueError("unknown photo in this project")
+        with self.db:
+            if row["proposal_reason"] is None:            # filled a registered number: keep the number
+                self.db.execute("UPDATE photo SET stored_name=NULL, original_name=NULL, sha256=NULL, mime=NULL, "
+                                "width=NULL, height=NULL, uploaded_by=NULL, uploaded_at=NULL WHERE id=?", (photo_id,))
+            else:
+                self.db.execute("DELETE FROM photo WHERE id=?", (photo_id,))
+            self._log_register(object_id, row["photo_no"], "photo moved", why, by)
+
+    def lab_report_by_sha(self, object_id: int, sha: str) -> Optional[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM lab_report WHERE object_id=? AND source_sha256=?", (object_id, sha)).fetchone()
 
     def set_certificate(self, report_id: int, idx: int, certificate: str, by: str) -> None:
         """The inspector types the certificate number of a lab line that has none (read from the certificate
